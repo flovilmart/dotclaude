@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.sh 'input_required'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/notify.sh 'complete'"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "Notion@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "linear@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(node:*)",
+      "Bash(nu:*)",
+      "Bash(pnpm:*)",
+      "Bash(npx oxfmt:*)",
+      "Bash(gh pr create:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}
