@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # open-worktree.sh <worktree-path> <ticket-id>
-# Moves the CURRENT (initiating) claude pane into a new tmux window laid out as:
+# Opens a new tmux window laid out as:
 #   nvim (left, full height) | claude (top-right) | shell (bottom-right)
-# The running claude session is physically relocated — no resume, no context loss.
+# A new Claude session is launched in the top-right pane, resumed from the
+# current session when CLAUDE_SESSION_ID is set (i.e. invoked from within claude).
 
 set -euo pipefail
 
@@ -19,23 +20,29 @@ if [ ! -d "$WORKTREE_PATH" ]; then
   exit 1
 fi
 
-# Capture the initiating claude pane BEFORE switching windows
-CLAUDE_PANE=$(tmux display-message -p "#{pane_id}")
+# Resume the current session if invoked from within claude, otherwise start fresh
+if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+  CLAUDE_CMD="claude --resume ${CLAUDE_SESSION_ID}"
+else
+  CLAUDE_CMD="claude"
+fi
 
 # Create a new window; its single pane will become the nvim pane
 tmux new-window -n "$TICKET_ID" -c "$WORKTREE_PATH"
 NVIM_PANE=$(tmux display-message -p "#{pane_id}")
-NEW_WINDOW=$(tmux display-message -p "#{window_id}")
 
-# Move the claude pane into the new window as a right-side horizontal split.
-# join-pane without -b places src to the RIGHT of the dst pane.
-tmux join-pane -h -s "$CLAUDE_PANE" -t "$NVIM_PANE"
+# Split right: top-right becomes the claude pane
+tmux split-window -h -c "$WORKTREE_PATH" -t "$NVIM_PANE"
+CLAUDE_PANE=$(tmux display-message -p "#{pane_id}")
 
 # Split the claude pane top/bottom to add the shell below it
 tmux split-window -v -c "$WORKTREE_PATH" -t "$CLAUDE_PANE"
 
 # Start nvim in the left pane
 tmux send-keys -t "$NVIM_PANE" "nvim ." Enter
+
+# Start claude in the top-right pane
+tmux send-keys -t "$CLAUDE_PANE" "$CLAUDE_CMD" Enter
 
 # Leave focus on claude (top-right)
 tmux select-pane -t "$CLAUDE_PANE"

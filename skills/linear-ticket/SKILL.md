@@ -115,7 +115,7 @@ bash ~/.claude/skills/linear-ticket/scripts/open-worktree.sh \
 
 This opens a new tmux window named after the ticket with:
 - **Left pane (full height):** `nvim .` — editor in the worktree root
-- **Top-right pane:** `claude` — Claude Code session in the worktree
+- **Top-right pane:** `claude --resume <session-id>` — resumes the current Claude session in the worktree (or starts fresh if not invoked from within claude)
 - **Bottom-right pane:** shell at the worktree root
 
 The script must be run inside an active tmux session. If not in tmux, warn the user.

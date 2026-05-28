@@ -16,3 +16,4 @@ shell-snapshots/
 tasks/
 telemetry/
 todos/
+**/*.local.md

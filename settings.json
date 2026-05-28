@@ -1,4 +1,26 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__plugin_linear_linear__list_teams",
+      "mcp__plugin_linear_linear__save_issue",
+      "mcp__claude_ai_Notion__notion-search",
+      "mcp__claude_ai_Notion__notion-fetch",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(node:*)",
+      "Bash(nu:*)",
+      "Bash(pnpm:*)",
+      "Bash(npx oxfmt:*)",
+      "Bash(gh pr create:*)",
+      "Bash(grep:*)",
+      "Bash(uv:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git worktree:*)"
+    ]
+  },
   "hooks": {
     "Notification": [
       {
@@ -28,26 +50,7 @@
     "pyright-lsp@claude-plugins-official": true,
     "linear@claude-plugins-official": true
   },
-  "permissions": {
-    "allow": [
-      "mcp__plugin_linear_linear__list_teams",
-      "mcp__plugin_linear_linear__save_issue",
-      "mcp__claude_ai_Notion__notion-search",
-      "mcp__claude_ai_Notion__notion-fetch",
-      "mcp__claude_ai_Notion__notion-create-pages",
-      "Bash(ls:*)",
-      "Bash(wc:*)",
-      "Bash(node:*)",
-      "Bash(nu:*)",
-      "Bash(pnpm:*)",
-      "Bash(npx oxfmt:*)",
-      "Bash(gh pr create:*)",
-      "Bash(grep:*)",
-      "Bash(uv:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git worktree:*)"
-    ]
-  }
+  "effortLevel": "high",
+  "theme": "dark-ansi",
+  "skipAutoPermissionPrompt": true
 }
