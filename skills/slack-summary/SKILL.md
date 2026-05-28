@@ -2,7 +2,7 @@
 name: slack-summary
 description: Summarize recent Slack activity across all channels, categorized by relevance for a Head of Engineering. Use when the user asks "what happened in slack", "summarize slack", "slack digest", "catch me up on slack", or similar.
 argument-hint: [since <date|"yesterday"|"today">]
-allowed-tools: [mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_search_channels, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_read_thread, Read]
+allowed-tools: [mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_search_channels, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_read_thread, Read, Write]
 ---
 
 # Slack Summary Skill
@@ -13,7 +13,75 @@ Produce a concise, aggressively categorized digest of Slack activity for the use
 
 ## Step 0 — Load Local Context
 
-Read `~/.claude/skills/slack-summary/context.local.md` if it exists. It contains company-specific context: org name, key channel names, team member names, customer names, and any standing priorities. Use this to calibrate relevance and attribution throughout the summary. If the file doesn't exist, proceed with defaults and infer context from messages.
+Try to read `~/.claude/skills/slack-summary/context.local.md`.
+
+**If the file exists:** load it and use it to calibrate relevance, channel priorities, team attribution, and customer names throughout the summary. Then proceed to Step 1.
+
+**If the file does not exist:** do NOT proceed to the summary yet. Instead, run the onboarding flow below to create it.
+
+### Onboarding flow (first-time setup)
+
+Tell the user:
+> "No local context file found. I'll ask you a few quick questions to set one up so future summaries are better calibrated. You can skip any question."
+
+Then ask the following questions **one group at a time** (don't dump them all at once). Wait for the answer before asking the next group.
+
+**Group 1 — Role & company**
+- What is your role / title?
+- What does your company do (one sentence)?
+- What is the company name?
+
+**Group 2 — Your team**
+- Who are the engineers on your team? (name + area of ownership, e.g. "Alex — backend, infra")
+- Are there other teams whose Slack activity you want to track? (e.g. CS, Sales, Product, Design)
+
+**Group 3 — Slack channels**
+- What are your highest-signal engineering channels? (e.g. #eng-general, #alerts, #pull-requests)
+- Are there any customer-specific channels? (e.g. #cs-acme, #ext-partner)
+- Are there any channels that are always low-signal and should be skipped? (e.g. #random, #prospecting)
+
+**Group 4 — Customers & priorities**
+- Who are your key customers right now?
+- What are the 3–5 most important ongoing engineering priorities or standing concerns?
+
+**Group 5 — Relevance calibration**
+- Are there any specific types of events that should always be flagged as urgent for you? (e.g. customer-facing outages, specific customer names, certain teammates pinging you)
+- Anything you never want surfaced in the summary?
+
+Once all answers are collected, write the context file to `~/.claude/skills/slack-summary/context.local.md` using the template below. Fill in only what the user provided; omit sections they skipped. Tell the user the file was saved and that future runs will use it automatically. Then proceed with the summary using the newly created context.
+
+### context.local.md template
+
+```markdown
+# Slack Summary — Local Context
+
+## Company
+{company name} — {one-line description}
+
+## User
+{name}, {role/title}
+
+## Engineering Team
+{list: Name (nickname) — area of ownership}
+
+## Other Teams to Track
+{list: team name — what to watch for}
+
+## Key Channels
+{list: #channel-name — why it's high signal}
+
+## Low-Signal Channels (skip)
+{list: #channel-name — reason}
+
+## Key Customers
+{comma-separated list}
+
+## Standing Priorities
+{bullet list}
+
+## Relevance Calibration
+{bullet list: condition → severity (🔴/🟡/🟠/🟢)}
+```
 
 ---
 
