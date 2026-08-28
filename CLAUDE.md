@@ -9,7 +9,7 @@ Head of Engineering at **tato**. Primary work is a large TypeScript monorepo wit
 
 | Tool         | Value                              |
 |--------------|------------------------------------|
-| Shell        | Nushell (`nu`) — prefer nu-compatible syntax in shell suggestions |
+| Shell        | Nushell (`nu`) — **always use nu syntax** for any command the user will run in their shell; never suggest bash-only syntax |
 | Terminal     | Ghostty                            |
 | Prompt       | Starship                           |
 | Multiplexer  | Tmux + tmuxinator                  |
@@ -33,7 +33,6 @@ Head of Engineering at **tato**. Primary work is a large TypeScript monorepo wit
 
 ## Git Preferences
 
-- Commits are **GPG-signed** — never skip signing
 - Pull strategy: **rebase** with autosquash
 - Editor: `nvim`
 - PRs via **GitHub CLI** (`gh pr create`)
