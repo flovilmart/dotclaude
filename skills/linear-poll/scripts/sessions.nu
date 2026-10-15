@@ -13,6 +13,7 @@ def main [ticket?: string, --json] {
   let rows = (
     $raw.stdout
     | from json
+    | default []
     | where {|s| ($s.kind? | default "") == "background" }
     | each {|s|
         {
@@ -21,7 +22,7 @@ def main [ticket?: string, --json] {
           state: ($s.state? | default "")
           status: ($s.status? | default "")
           waitingFor: ($s.waitingFor? | default "")
-          pid: ($s.pid? | default null)
+          pid: $s.pid?
           sessionId: ($s.sessionId? | default "")
           cwd: ($s.cwd? | default "")
         }

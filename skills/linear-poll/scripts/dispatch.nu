@@ -35,35 +35,42 @@ def main [
 
   cd $wt
   let bg_args = (["--bg"] | append $args | append [$prompt])
-  let out = (do { ^claude ...$bg_args } | complete)
+  # Redirect to files rather than pipes so a detached session can never hold
+  # the dispatcher's stdout/stderr open.
+  let tmp_out = (^mktemp | str trim)
+  let tmp_err = (^mktemp | str trim)
+  let exit_code = (try { ^claude ...$bg_args out> $tmp_out err> $tmp_err; 0 } catch { 1 })
+  let stdout = (open --raw $tmp_out | into string)
+  let stderr = (open --raw $tmp_err | into string)
+  ^rm -f $tmp_out $tmp_err
 
-  if $out.exit_code == 0 {
+  if $exit_code == 0 {
     # output looks like: "backgrounded · 7c5dcf5d · ENG-123"
-    let line = ($out.stdout | lines | where {|l| $l | str contains "backgrounded" } | append [""] | first)
+    let line = ($stdout | lines | where {|l| $l | str contains "backgrounded" } | append [""] | first)
     let id = ($line | split row "·" | each {|p| $p | str trim } | append ["" ""] | get 1)
-    {
+    print ({
       ticket: $ticket
       worktree: $wt
       branch: $branch
       mode: "bg"
       session: $id
-    } | to json --raw
+    } | to json --raw)
     return
   }
 
-  let err = ($out.stderr + $out.stdout)
+  let err = ($stderr + $stdout)
   let untrusted = ($err | str downcase | str contains "not trusted")
   if $untrusted and ("TMUX" in $env) {
     let quoted = ($args | append [$prompt] | each {|a| $"'($a)'" } | str join " ")
     ^tmux new-window -n $ticket -c $wt $"claude ($quoted)"
-    {
+    print ({
       ticket: $ticket
       worktree: $wt
       branch: $branch
       mode: "tmux"
       session: ""
       note: "worktree not trusted yet: accept the trust dialog in the new tmux window; the session then continues there (press ← or /background to detach it)"
-    } | to json --raw
+    } | to json --raw)
     return
   }
 

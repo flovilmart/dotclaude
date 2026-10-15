@@ -23,7 +23,8 @@ def checkout-branch [wt: string, branch: string, default_branch: string] {
 }
 
 def main [repo_path: string, branch: string] {
-  let main_path = (^git -C $repo_path rev-parse --show-toplevel | str trim)
+  # Resolve the main checkout even when repo_path is itself a linked worktree
+  let main_path = (^git -C $repo_path rev-parse --path-format=absolute --git-common-dir | str trim | path dirname)
   let repo_name = ($main_path | path basename)
   let parent = ($main_path | path dirname)
 
@@ -51,9 +52,11 @@ def main [repo_path: string, branch: string] {
         }
       }
     | where {|r|
-        (($r.path | path basename) | str starts-with $"($repo_name)-wt")
-          and ($r.raw != "(bare)")
-          and ($r.branch != "detached")
+        # last column is "[branch]" for normal rows; bare, detached and prunable rows differ
+        (
+          (($r.path | path basename) | str starts-with $"($repo_name)-wt")
+          and ($r.raw | str starts-with "[")
+        )
       }
   )
 
@@ -74,7 +77,8 @@ def main [repo_path: string, branch: string] {
     $rows
     | where {|r|
         let is_merged = ($merged | any {|m| $m == $r.branch })
-        let is_clean = ((^git -C $r.path status --porcelain | str trim) == "")
+        let st = (do { ^git -C $r.path status --porcelain } | complete)
+        let is_clean = (($st.exit_code == 0) and (($st.stdout | str trim) == ""))
         $is_merged and $is_clean
       }
   )

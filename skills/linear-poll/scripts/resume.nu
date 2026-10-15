@@ -25,7 +25,7 @@ def main [ticket: string, message: string] {
     print "none"
     return
   }
-  cd $s.cwd
+  if $s.cwd != "" { cd $s.cwd }
   let out = (do { ^claude --resume $s.sessionId --bg $message } | complete)
   if $out.exit_code != 0 {
     error make { msg: $"claude --resume --bg failed: ($out.stderr | str trim)" }
