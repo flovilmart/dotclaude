@@ -101,7 +101,7 @@ claude agents                     # one coordinator session per ticket, in its o
 claude attach ENG-123             # talk to a coordinator; ← to detach
 ```
 
-- Coordinators (`agents/ticket-coordinator.md`) run `/ticket-workflow` and delegate everything to background subagents: `repo-scout`, `spec-challenger`, `slice-planner`, `design-challenger`, `implementer`, `code-challenger`, `verifier`.
+- Coordinators (`agents/ticket-coordinator.md`) run `/ticket-workflow`: background subagents for the human-facing steps (`repo-scout`, `spec-challenger`), and the saved workflows `workflows/plan.js` and `workflows/subtask.js` for the deterministic ones (`slice-planner` ⇄ `design-challenger`; `implementer` ⇄ `code-challenger` → `verifier` → `security-reviewer` + `smoke-tester`).
 - Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
 - Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
 - Slices become Linear sub-issues, each with its own PR, picked up by priority; dependent ones are stacked via `gh stack` (`skills/stack-pr`); feature flags per the repo's `AGENTS.md`.

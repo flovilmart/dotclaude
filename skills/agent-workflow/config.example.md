@@ -40,7 +40,8 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 ## Pull requests
 - auto_merge: true               # enable GitHub auto-merge on a PR once it is approved and green; merges only when branch protection (required human reviews) is satisfied
 - merge_method: squash           # squash | merge | rebase, unless the repo's AGENTS.md says otherwise
-- smoke_test: auto               # auto (user-visible or integration slices) | always | never
+- smoke_test: auto               # auto (slices the planner marks smoke-worthy) | always | never
+- max_fix_rounds: 3              # fix rounds per gate (review, verify, security, smoke) inside the subtask workflow before a human is asked
 - security_review: always        # always | never — gate before a PR leaves draft
 
 ## Conventions (defaults the coordinator uses when a repo's AGENTS.md is silent)

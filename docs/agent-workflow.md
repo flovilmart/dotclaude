@@ -21,8 +21,11 @@ session only dispatches and relays, so it stays free.
             └─▶ claude --bg --name ENG-124 ...                           (worktree platform-wt1)
 ```
 
-Each box under a coordinator is a background subagent. The coordinator's own turns are short:
-dispatch, wait for the completion notification, decide, dispatch again. You can `claude attach ENG-123`
+The coordinator's own turns are short: dispatch, wait for the completion notification, decide,
+dispatch again. Steps that involve humans or Linear (claim, spec gate, sub-issues, PR events) are
+background subagents it steers; the two deterministic steps, planning and the per-subtask inner loop,
+are saved workflows (`workflows/plan.js`, `workflows/subtask.js`) that return one structured result
+each, with retries and parallel gates as code rather than as model decisions. You can `claude attach ENG-123`
 at any time and talk to it; it answers from its state file and resumes.
 
 ## Pieces
@@ -34,6 +37,7 @@ at any time and talk to it; it answers from its state file and resumes.
 | `skills/linear-poll/scripts/*.nu` | `ensure-worktree.nu` (sibling `<repo>-wt<N>` pool, same convention as `linear-ticket`), `dispatch.nu` (worktree + `claude --bg`), `sessions.nu` (wraps `claude agents --json --all`), `resume.nu` (wake a stopped coordinator). |
 | `skills/ticket-workflow/` | The per-ticket pipeline the coordinator runs. |
 | `skills/stack-pr/` | Stacked PR mechanics: GitHub native `gh stack` when installed, manual `gh pr create --base` otherwise. |
+| `workflows/plan.js`, `workflows/subtask.js` | Saved workflows the coordinator runs with the `Workflow` tool: the plan with bounded design-challenge rounds, and each subtask's implement → review → verify → security + smoke loop with bounded fix rounds. One structured result per run; resumable from cache. |
 | `agents/ticket-coordinator.md` | Main agent of each coordinator session (`--agent ticket-coordinator`): orchestrates, never implements. |
 | `agents/repo-scout.md` | Reads AGENTS.md / CLAUDE.md / manifests / CI → repo profile. |
 | `agents/spec-challenger.md` | Definition of ready; drafts the `## Spec`; asks at most five questions with defaults. |

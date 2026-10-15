@@ -2,7 +2,7 @@
 name: ticket-workflow
 description: "The per-ticket pipeline run by a ticket-coordinator session inside the ticket's worktree — claim the Linear issue, build a repo profile, gate the spec (ask clarifications into the Linear task), plan a stack of small reversible slices, challenge the design, implement each slice XP-style with adversarial review and verification, open stacked PRs, update Linear. Use when a session is started with \"/ticket-workflow <ticket-id> [dispatcher-session]\" or when the user says \"work ticket ENG-123 end to end\"."
 argument-hint: "<ticket-id> [dispatcher-session-name]"
-allowed-tools: [Agent, Bash, Read, Write, Edit, Glob, Grep, ListAgents, SendMessage, Skill, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_comments, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__save_comment, mcp__plugin_linear_linear__list_issue_statuses]
+allowed-tools: [Agent, Workflow, Bash, Read, Write, Edit, Glob, Grep, ListAgents, SendMessage, Skill, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_comments, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__save_comment, mcp__plugin_linear_linear__list_issue_statuses]
 ---
 
 # Ticket workflow — coordinator pipeline
@@ -28,6 +28,8 @@ CONTEXT: <spec, repo profile, slice/sub-issue, branch, base branch, prior findin
 ```
 
 A worker that reports `MISALIGNED` stops the pipeline for that subtask until you adjust the brief or escalate to the human. Record the decision in the state file.
+
+Two steps are deterministic and run as **saved workflows** instead of hand-dispatched subagents: the plan (`~/.claude/workflows/plan.js`) and each subtask's inner loop (`~/.claude/workflows/subtask.js`). Call them with the `Workflow` tool and `scriptPath` set to the absolute path (expand `~`). A workflow runs in the background and wakes you with one structured result, so you stay free; the scripts build the four-part brief for every agent from the `args` you pass. Record each run id in the state file: `Workflow({scriptPath, resumeFromRunId})` replays finished stages from cache after a crash.
 
 ---
 
@@ -73,13 +75,18 @@ On its report:
 
 ## Phase 3 — Plan and challenge
 
-1. Delegate **slice-planner** with the spec, the repo profile, the worktree path, and the branch pattern. Stop turn.
-2. On the plan: delegate **design-challenger** with the plan, the spec, the repo profile. Stop turn.
-3. On the review:
-   - **REVISE**: delegate **slice-planner** again with the blocking findings ("revise the plan to address these; keep what was not challenged"). Then design-challenger again. At most two revision rounds; after that, you decide and record why.
-   - **APPROVE**: store the final plan in the state file (the slice table becomes the `## Slices` table with status `todo`). If the plan lists "Open questions for the human (blocking)", treat them like a clarification round (Phase 2 mechanics) before implementing.
-4. **Create one Linear sub-issue per slice** (when `create_subissues` is true, the default): `save_issue` with `team`, `parentId: <ticket>`, `title: "<ticket> s<n>: <slice goal>"`, `priority` from the plan, the same `cycle` as the parent, `state: <todo_state>`, `assignee: "me"`, and a description holding the slice details (goal, done-when, guardrails, tests first, flag impact, branch name). Add `blockedBy` for dependencies. Record `sub-issue id ↔ slice` in the state file. Post comment `<marker> · <ticket> · plan` on the parent with the slice table (including sub-issue ids) and the flag name.
-5. Pick the stacking tool (`/stack-pr` → "Pick the tool once").
+1. Run the plan workflow and stop your turn:
+   ```
+   Workflow({ scriptPath: "<home>/.claude/workflows/plan.js",
+              args: { ticket, worktree, spec, profile, baseBranch: <gitBranchName>, branchPattern: <slice_branch_pattern>, maxRounds: 2 } })
+   ```
+   It runs slice-planner, then design-challenger with up to two revision rounds, and returns `{ status, plan, review, rounds, reports }`.
+2. On the result:
+   - `APPROVED`: store `plan.report` and the slice table in the state file (status `todo` per slice). Go to step 3.
+   - `NEEDS_HUMAN` with `openQuestions`: treat them like a clarification round (Phase 2 mechanics: comment, label, message), then re-run the workflow with the answers appended to `spec`.
+   - `NEEDS_HUMAN` for any other reason, or `FAILED`: read `reports`, decide, and either re-run with an adjusted brief in `args` or escalate with the exact reason.
+3. **Create one Linear sub-issue per slice** (when `create_subissues` is true, the default): `save_issue` with `team`, `parentId: <ticket>`, `title: "<ticket> s<n>: <slice goal>"`, `priority` from the plan, the same `cycle` as the parent, `state: <todo_state>`, `assignee: "me"`, and a description holding the slice details (goal, done-when, guardrails, tests first, flag impact, branch name, smoke flag). Add `blockedBy` for dependencies. Record `sub-issue id ↔ slice` in the state file. Post comment `<marker> · <ticket> · plan` on the parent with the slice table (including sub-issue ids) and the flag name.
+4. Pick the stacking tool (`/stack-pr` → "Pick the tool once").
 
 ## Phase 4 — Work the subtasks by priority
 
@@ -89,21 +96,22 @@ Subtasks are not a fixed sequence. Each pick is a fresh decision, and you may st
 
 **Start.** `save_issue` on the sub-issue: `state: <in_progress_state>`. Branch per `/stack-pr`: if the subtask depends on an unmerged subtask, `add` it on top of that subtask's branch (stacked); otherwise branch from the default branch (standalone). Slice 1 uses the ticket's base branch. Record branch and status `in-progress`.
 
-**Implement.** Delegate **implementer** with the brief (TASK = this subtask on this branch; GOAL and GUARDRAILS from the spec and the sub-issue; DONE WHEN = slice "done when" + SLICE REPORT). Stop turn.
-- `BLOCKED` / `MISALIGNED` → comment on the sub-issue with the precise question, message the dispatcher, mark `blocked`, end turn. On the answer, re-delegate with the answer in CONTEXT.
+**Run the subtask workflow** and stop your turn:
+```
+Workflow({ scriptPath: "<home>/.claude/workflows/subtask.js",
+           args: { ticket, branch, base: <previous subtask branch or default branch>, worktree,
+                   slice: <slice details from the plan / sub-issue>, spec, profile, flag,
+                   security: <security_review == always>, smoke: <smoke_test == always, or auto and slice.smoke>,
+                   maxRounds: <max_fix_rounds> } })
+```
+It runs implementer → code-challenger (fix rounds) → verifier (fix rounds) → security-reviewer and smoke-tester in parallel (fix rounds), every agent with a four-part brief, and returns one result:
 
-**Challenge.** Delegate **code-challenger** (brief: TASK = review this diff against the spec and the sub-issue; base branch given). Stop turn.
-- `REQUEST_CHANGES` → delegate **implementer** with the BLOCKING and SHOULD findings ("apply these review findings on branch X; reply per finding"), then code-challenger again on the new diff. Up to three rounds; after that, you decide which findings are truly blocking, record why, and continue. NITs ride the subtask's next push.
+- `READY`: `commits`, `rounds`, `security`, `smoke`, `carried` (SHOULD and NIT findings to mention in the PR body and carry into the next push), `reports`. Go to **Ship**.
+- `BLOCKED` (`question`, `stage`): the implementer needs a human decision. Comment on the sub-issue with the precise question, message the dispatcher, mark `blocked`, end turn. On the answer, re-run the workflow with the answer appended to `slice` (use `resumeFromRunId` so finished stages replay from cache).
+- `NEEDS_HUMAN` (`reason`, `stage`, `open`): a gate stayed red after `max_fix_rounds`, or a worker reported `MISALIGNED`. Decide: adjust the brief in `args` and re-run, or escalate with the exact `open` findings or failures. Never mark a PR ready past an open BLOCKING security finding.
+- `FAILED`: an agent returned nothing (API error). Re-run once with `resumeFromRunId`; then escalate.
 
-**Verify.** Delegate **verifier** (brief: TASK = run the repo gates on this branch; DONE WHEN = VERIFICATION report). Stop turn.
-- `FAIL` → **implementer** with the verbatim failure ("make the checks pass without weakening them"), then verifier again. Up to three rounds, then escalate with the exact failing output.
-- Formatter changed files → implementer commits them.
-
-**Security gate** (when `security_review` is `always`, the default). Delegate **security-reviewer** (brief: TASK = security review of this branch against its base; DONE WHEN = SECURITY REVIEW report). Stop turn. `BLOCK` → implementer with the BLOCKING findings, then security-reviewer again; up to three rounds, then escalate to the human. Never mark a PR ready with an open BLOCKING security finding.
-
-**Smoke test** (when `smoke_test` is `always`, or `auto` and the slice has user-visible, API, CLI or integration behaviour). Delegate **smoke-tester** (brief: TASK = run the app and exercise this slice's acceptance criteria, flag off and on; GUARDRAILS = never edit code, stop anything you start; DONE WHEN = SMOKE TEST report). Stop turn. `FAIL` → implementer with the evidence, then verifier and smoke-tester again; `SKIPPED` → record the reason in the PR body and the state file, do not block. Security gate and smoke test can run in parallel (both background).
-
-**Ship.** `/stack-pr submit` (draft) then `/stack-pr ready <branch>`. Put the verification, security and smoke results in the PR body in three lines, and request review from the humans the repo's docs or CODEOWNERS name (`gh pr edit --add-reviewer`). Attach the PR to the **sub-issue** (`save_issue` with `links: [{url, title}]`) and to the parent. Sub-issue `state: <review_state>`. Slice table: `pr-open` + PR URL. One log line.
+**Ship.** `/stack-pr submit` (draft) then `/stack-pr ready <branch>`. Put the verification, security and smoke results and the carried SHOULD/NIT findings in the PR body in a few lines, and request review from the humans the repo's docs or CODEOWNERS name (`gh pr edit --add-reviewer`). Attach the PR to the **sub-issue** (`save_issue` with `links: [{url, title}]`) and to the parent. Sub-issue `state: <review_state>`. Slice table: `pr-open` + PR URL. One log line.
 
 **Loop.** Check for messages (pause, priority change, review feedback). Then **Pick** again. Shipping a subtask and then being asked to do something else is normal; the state file and Linear hold everything needed to pick up later.
 
