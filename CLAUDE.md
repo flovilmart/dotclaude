@@ -95,5 +95,5 @@ claude attach ENG-123             # talk to a coordinator; ← to detach
 - Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
 - Slices become Linear sub-issues, each with its own PR, picked up by priority; dependent ones are stacked via `gh stack` (`skills/stack-pr`); feature flags per the repo's `AGENTS.md`.
 - Gates before a PR leaves draft: `verifier`, `security-reviewer`, `smoke-tester`. The poll relays PR events (CI, reviews, merges); auto-merge only after human approval via branch protection; sub-issues go to Done on merge.
-- Hooks log every subagent run to `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises it. `selftest.nu` tests the scripts offline.
+- Hooks log every subagent run to `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises it; `nu ~/.claude/skills/agent-workflow/scripts/tui.nu` is a live terminal dashboard over it. `selftest.nu` tests the scripts offline.
 - Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).

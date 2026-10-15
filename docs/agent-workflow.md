@@ -104,7 +104,9 @@ assumptions in the spec, and continues.
   resumes from its state file), up to `max_redispatch` times, then labelled `agent-stalled` with a comment.
 - **Observability.** Hooks append every subagent start/stop and session end to
   `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises runs and minutes per ticket
-  and agent, so review churn and slow steps are visible. Token cost is not in the hook payload; use
+  and agent, so review churn and slow steps are visible. For a live view in a terminal, run
+  `nu ~/.claude/skills/agent-workflow/scripts/tui.nu` (overview, agents, worktrees, timeline, recent and
+  running agents; `w` cycles the time window, `q` quits). Token cost is not in the hook payload; use
   `/cost` in a coordinator or your usage dashboard for that.
 - **Tests.** `/agent-workflow start` runs `selftest.nu` once (temp repo, no network). Run it after any
   change to the scripts. The pipeline itself is best dry-run on a sandbox repo with
