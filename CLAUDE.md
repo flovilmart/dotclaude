@@ -41,17 +41,6 @@ Head of Engineering at **tato**. Primary work is a large TypeScript monorepo wit
 
 ---
 
-## Allowed Bash Commands
-
-These are pre-approved in `~/.claude/settings.json`:
-
-```
-ls, wc, node, nu, pnpm, npx oxfmt, gh pr create, grep, uv,
-git add, git commit, git push, python3 -c
-```
-
----
-
 ## MCP Integrations
 
 | Integration       | Purpose               | Key Operations                                      |

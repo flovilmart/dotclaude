@@ -8,7 +8,6 @@
       "mcp__claude_ai_Notion__notion-create-pages",
       "Bash(ls:*)",
       "Bash(wc:*)",
-      "Bash(node:*)",
       "Bash(nu:*)",
       "Bash(pnpm:*)",
       "Bash(npx oxfmt:*)",
@@ -47,10 +46,10 @@
       "Bash(gh run view:*)",
       "Bash(gh run list:*)",
       "Bash(gh api:*)",
-      "Bash(claude --resume:*)"
+      "Bash(claude --resume:*)",
+      "Bash(psql -h localhost:*)"
     ]
   },
-  "model": "opus[1m]",
   "hooks": {
     "Notification": [
       {
@@ -108,9 +107,16 @@
     "typescript-lsp@claude-plugins-official": true,
     "Notion@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "linear@claude-plugins-official": true
+    "linear@claude-plugins-official": true,
+    "vanta-mcp-plugin@claude-plugins-official": true,
+    "posthog@claude-plugins-official": false
   },
   "effortLevel": "xhigh",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  },
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "theme": "dark-ansi",
