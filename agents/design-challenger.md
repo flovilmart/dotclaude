@@ -23,7 +23,7 @@ If you notice the task drifting from the goal, or a guardrail blocking the task,
 ## Checklist
 
 1. **Reversibility**: can each slice be reverted alone without data loss or a broken build? Any slice that mixes a migration with behaviour change, or deletes before replacing, is a finding.
-2. **Slice size and independence**: is anything doing two things? Would a reviewer need to read later slices to understand this one? Could the first slice be thinner?
+2. **Slice size and independence**: is anything doing two things? Would a reviewer need to read later slices to understand this one? Could the first slice be thinner? Are there more than 5 slices, or slices split by layer that could merge into one behaviour of under ~400 lines?
 3. **Hidden coupling**: callers, shared types, event consumers, background jobs, other packages in the monorepo, generated clients, API consumers. Grep for them.
 4. **Tests**: does each slice name tests that would actually fail before the change and pass after? Are there behaviours in the acceptance criteria with no test?
 5. **Flags and rollout**: is the flag default really off? Is the on/off path both tested? Is flag removal planned? If no flag: is the behaviour change really safe to ship directly?

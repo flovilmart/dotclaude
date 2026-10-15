@@ -86,7 +86,7 @@ ${asText(a.profile)}`
 
 const planBrief = () => `TASK: design the stack of subtasks (slices) for ${a.ticket}.
 GOAL: the spec's goal reached through small, independently reviewable and revertable slices, each shippable on its own.
-GUARDRAILS: the spec's Guardrails and the repo's AGENTS.md; under ~200 changed lines per slice; walking skeleton first; feature flag per the repo's mechanism when behaviour is user-visible and spans slices or carries rollout risk; tests named before code; no speculative generality; honest dependencies; a priority per slice.
+GUARDRAILS: the spec's Guardrails and the repo's AGENTS.md; under ~400 changed lines per slice excluding tests and generated code (flag above ~800); at most 5 slices, else propose splitting the ticket; one behaviour end to end per slice, never one slice per layer; walking skeleton first; feature flag per the repo's mechanism when behaviour is user-visible and spans slices or carries rollout risk; tests named before code; no speculative generality; honest dependencies; a priority per slice.
 DONE WHEN: you return the STACK PLAN as structured output (slices with slug, goal, priority, dependsOn, doneWhen, guardrails, testsFirst, steps, smoke) plus the markdown report.
 ${context()}`
 

@@ -109,7 +109,8 @@
     "pyright-lsp@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "vanta-mcp-plugin@claude-plugins-official": true,
-    "posthog@claude-plugins-official": false
+    "posthog@claude-plugins-official": false,
+    "slack@anthropic-plugin-directory": true
   },
   "effortLevel": "xhigh",
   "modelSettings": {
@@ -121,7 +122,7 @@
   "skipWorkflowUsageWarning": true,
   "theme": "dark-ansi",
   "remoteControlAtStartup": true,
+  "crossSessionInbound": "accept",
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true,
-  "crossSessionInbound": "accept"
+  "skipAutoPermissionPrompt": true
 }
