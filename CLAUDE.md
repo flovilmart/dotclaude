@@ -86,3 +86,22 @@ git add, git commit, git push, python3 -c
 - `oxfmt` used for code formatting
 - tmux sessions managed with tmuxinator
 - fzf used for interactive file/history selection
+
+---
+
+## Agent Workflow (Linear → worktree → stacked PRs)
+
+Autonomous ticket pipeline; full description in `~/.claude/docs/agent-workflow.md`.
+
+```nu
+claude --name dispatcher          # main session; stays free, only dispatches
+/agent-workflow start             # onboarding on first run, then arms the /linear-poll cron
+/agent-workflow status | stop | dispatch <id> | clarify <id>
+claude agents                     # one coordinator session per ticket, in its own <repo>-wt<N> worktree
+claude attach ENG-123             # talk to a coordinator; ← to detach
+```
+
+- Coordinators (`agents/ticket-coordinator.md`) run `/ticket-workflow` and delegate everything to background subagents: `repo-scout`, `spec-challenger`, `slice-planner`, `design-challenger`, `implementer`, `code-challenger`, `verifier`.
+- Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
+- Small reversible slices, feature flags per the repo's `AGENTS.md`, GitHub stacked PRs via `gh stack` (`skills/stack-pr`).
+- Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).

@@ -18,7 +18,27 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git worktree:*)"
+      "Bash(git worktree:*)",
+      "mcp__plugin_linear_linear__list_issues",
+      "mcp__plugin_linear_linear__get_issue",
+      "mcp__plugin_linear_linear__list_cycles",
+      "mcp__plugin_linear_linear__list_comments",
+      "mcp__plugin_linear_linear__save_comment",
+      "mcp__plugin_linear_linear__list_issue_statuses",
+      "Bash(claude agents:*)",
+      "Bash(claude logs:*)",
+      "Bash(claude --version:*)",
+      "Bash(gh stack:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh extension list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch:*)",
+      "Bash(git branch:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
     ]
   },
   "model": "opus[1m]",
@@ -57,5 +77,6 @@
   "theme": "dark-ansi",
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "crossSessionInbound": "accept"
 }

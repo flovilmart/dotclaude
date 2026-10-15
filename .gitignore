@@ -21,3 +21,4 @@ todos/
 daemon*
 gh-pr-status-cache*
 jobs*
+/agent-workflow/
