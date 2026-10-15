@@ -1,4 +1,5 @@
 backups/
+
 plans/
 cache/
 debug/
@@ -33,3 +34,4 @@ gh-pr-status-cache*
 jobs*
 /agent-workflow/
 settings.automode.local.json
+.claude
