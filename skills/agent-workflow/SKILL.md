@@ -32,7 +32,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
 
 ### Onboarding questions (one group at a time)
 
-- **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; which Todo issues to claim (`all`, `unassigned-or-me`, `assignee:me`, `label:<name>`); label to use while waiting for clarifications.
+- **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; label to use while waiting for clarifications. Tell the user that only issues assigned to them are ever polled.
 - **Group 2 — Repos**: default checkout path, plus optional `project:` / `label:` → path rows. Paths use `~/src/<org>/<repo>`.
 - **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), model override, max parallel coordinators, poll interval.
 
@@ -46,7 +46,7 @@ Run in parallel and print one compact table plus one line per item:
 
 - `nu ~/.claude/skills/linear-poll/scripts/sessions.nu` → coordinators (name, state, status, waitingFor). A `waitingFor` of `permission prompt` means the user must `claude attach <ticket>` to answer it.
 - `CronList` → whether the poll loop is armed.
-- `list_issues` for the team's current cycle with `label: <needs_spec_label>` → tickets waiting on the human.
+- `list_issues` with `assignee: "me"` for the current cycle and `label: <needs_spec_label>` → tickets waiting on the human.
 - For each coordinator: the first lines of `~/.claude/agent-workflow/state/<ticket>.md` (phase and slice table), if present.
 
 ---

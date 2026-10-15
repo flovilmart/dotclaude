@@ -1,6 +1,6 @@
 ---
 name: linear-poll
-description: "One tick of the Linear poll loop. Finds Todo issues in the team's current cycle, dispatches a background coordinator session (own worktree) for each new one, and wakes coordinators whose clarification questions were answered. Run on a schedule with `/loop 10m /linear-poll` or via `/agent-workflow start`; can also be run once by hand."
+description: "One tick of the Linear poll loop. Finds Todo issues assigned to me in the current cycle, dispatches a background coordinator session (own worktree) for each new one, and wakes coordinators whose clarification questions were answered. Run on a schedule with `/loop 10m /linear-poll` or via `/agent-workflow start`; can also be run once by hand."
 argument-hint: "[--dry-run]"
 allowed-tools: [Bash, Read, ListAgents, SendMessage, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_comments]
 ---
@@ -23,15 +23,11 @@ Call `ListAgents`. The first line names this session; use it as `<dispatcher>` w
 
 ## 3. Candidates
 
-`list_issues` with `team: <team_key>`, `cycle: <cycle id>`, `state: <todo_state>`, `limit: 50`, `fields: [id, title, gitBranchName, labels, assignee, assigneeId, project, url, priority, parentId]`.
+Only issues **assigned to the connected Linear user** are ever picked up. Never widen this to the team.
 
-Apply `claim_filter`:
-- `all`: keep everything.
-- `unassigned-or-me`: keep issues with no assignee or assigned to me.
-- `assignee:me`: keep only mine.
-- `label:<name>`: keep issues carrying that label.
+`list_issues` with `assignee: "me"`, `team: <team_key>`, `cycle: <cycle id>`, `state: <todo_state>`, `limit: 50`, `fields: [id, title, gitBranchName, labels, assignee, assigneeId, project, url, priority, parentId]`.
 
-Also drop:
+Drop:
 - issues that already carry `needs_spec_label` (mid-clarification, handled in step 6);
 - sub-issues whose `parentId` names a ticket that has a coordinator session (any state) — the coordinator works its own subtasks by priority. A sub-issue whose parent has no coordinator is an ordinary ticket.
 
@@ -66,7 +62,7 @@ Do not claim the issue in Linear here: the coordinator claims it (state → `in_
 
 ## 6. Clarifications answered
 
-`list_issues` with `team`, `cycle`, `label: <needs_spec_label>`, `fields: [id, updatedAt]`. For each:
+`list_issues` with `assignee: "me"`, `team`, `cycle`, `label: <needs_spec_label>`, `fields: [id, updatedAt]`. For each:
 
 1. `list_comments` for the issue, ordered by `createdAt`.
 2. Find the newest comment whose body starts with `comment_marker` and contains `Clarifications needed` (the questions), with its `createdAt`.

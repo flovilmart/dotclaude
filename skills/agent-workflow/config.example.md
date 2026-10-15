@@ -11,8 +11,7 @@ Copy this file to `~/.claude/skills/agent-workflow/config.local.md` (gitignored)
 - in_progress_state: In Progress                     # set on claim
 - review_state: In Review                            # set when the stack is ready
 - needs_spec_label: needs-spec                       # added while waiting for clarifications
-- claim_filter: unassigned-or-me                     # all | unassigned-or-me | assignee:me | label:<name>
-- assign_on_claim: true                              # assign the issue to me when claimed
+# Only issues assigned to the connected Linear user are ever polled (never the whole team).
 - create_subissues: true                             # one Linear sub-issue per slice, each with its own PR; priority is picked up from Linear
 
 ## Repos

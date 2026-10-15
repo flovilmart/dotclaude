@@ -1,6 +1,6 @@
 # Agent workflow: Linear → worktree → stacked PRs
 
-A Linear ticket in the current cycle's **Todo** column becomes, without anyone typing, a dedicated
+A Linear ticket **assigned to you** in the current cycle's **Todo** column becomes, without anyone typing, a dedicated
 coordinator session in its own git worktree, a spec gate that asks you only the questions that
 matter, a plan of small reversible slices challenged before code exists, XP-style implementation with
 an adversarial reviewer and a verifier per slice, and a stack of pull requests on GitHub. Your main
@@ -53,8 +53,8 @@ loads `AGENTS.md` automatically only when the repo has no `CLAUDE.md`; a `CLAUDE
    ```nu
    claude --name dispatcher
    ```
-2. `/agent-workflow start`. First run asks a few questions (team, state names, which Todo issues to
-   claim, repo paths, coordinator permission mode, poll interval) and writes
+2. `/agent-workflow start`. First run asks a few questions (team, state names, repo paths,
+   coordinator permission mode, poll interval). Only issues assigned to you are ever polled and writes
    `~/.claude/skills/agent-workflow/config.local.md`. It then creates the poll cron.
 3. Optional but recommended: `gh extension install github/gh-stack` for native stacks.
 4. First dispatch into a brand-new worktree directory may need the workspace trust dialog. The

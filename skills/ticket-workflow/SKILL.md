@@ -36,7 +36,7 @@ A worker that reports `MISALIGNED` stops the pipeline for that subtask until you
 1. `pwd` is the worktree; `git branch --show-current` should be the issue's `gitBranchName`. If not, stop and report (the dispatcher allocates worktrees; do not create one).
 2. `get_issue <ticket>` with `fields: [id, title, description, url, gitBranchName, status, labels, assignee, project, attachments]` and `list_comments`. Keep title, description, comments, attachment titles and URLs.
 3. If a `## Spec` section exists in the description, note it: it is the authoritative spec.
-4. Claim: `save_issue` with `id: <ticket>`, `state: <in_progress_state>`, and `assignee: "me"` when `assign_on_claim` is true. Post comment: `<marker> · <ticket> · started` with the worktree path and `claude attach <ticket>` as the way in.
+4. Claim: `save_issue` with `id: <ticket>`, `state: <in_progress_state>` (the issue is already assigned to the user; manual `dispatch` of an unassigned issue also sets `assignee: "me"`). Post comment: `<marker> · <ticket> · started` with the worktree path and `claude attach <ticket>` as the way in.
 5. Write the state file:
    ```
    # <ticket> — <title>

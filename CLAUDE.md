@@ -91,7 +91,7 @@ git add, git commit, git push, python3 -c
 
 ## Agent Workflow (Linear → worktree → stacked PRs)
 
-Autonomous ticket pipeline; full description in `~/.claude/docs/agent-workflow.md`.
+Autonomous ticket pipeline for Linear issues **assigned to me** (never the whole team); full description in `~/.claude/docs/agent-workflow.md`.
 
 ```nu
 claude --name dispatcher          # main session; stays free, only dispatches
