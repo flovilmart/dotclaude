@@ -38,7 +38,16 @@
       "Bash(git branch:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh api:*)",
+      "Bash(claude --resume:*)"
     ]
   },
   "model": "opus[1m]",
@@ -60,6 +69,36 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/notify.sh 'complete'"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
           }
         ]
       }

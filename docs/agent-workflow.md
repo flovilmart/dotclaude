@@ -14,8 +14,9 @@ session only dispatches and relays, so it stays free.
             │        │ /ticket-workflow ENG-123 dispatcher
             │        ├─ repo-scout        → repo profile (commands, flags, conventions from AGENTS.md)
             │        ├─ spec-challenger   → READY | questions  ──▶ Linear comment + label + message to you
-            │        ├─ slice-planner ⇄ design-challenger      → stack plan (Linear comment)
-            │        └─ per slice: implementer ⇄ code-challenger → verifier → gh stack submit / pr ready
+            │        ├─ slice-planner ⇄ design-challenger      → stack plan → Linear sub-issues
+            │        └─ per subtask: implementer ⇄ code-challenger → verifier → security-reviewer + smoke-tester
+            │                        → gh stack submit / pr ready → (PR events) → auto-merge once humans approve → sub-issue Done
             │
             └─▶ claude --bg --name ENG-124 ...                           (worktree platform-wt1)
 ```
@@ -41,6 +42,11 @@ at any time and talk to it; it answers from its state file and resumes.
 | `agents/implementer.md` | One slice, red → green → refactor, tiny commits, repo checks before each commit. |
 | `agents/code-challenger.md` | Adversarial diff review against spec and plan. |
 | `agents/verifier.md` | Runs the repo's real quality gates and reports verbatim. |
+| `agents/security-reviewer.md` | Dependency audit, secret scan, diff review for authz/injection/exposure; blocks a PR leaving draft. |
+| `agents/smoke-tester.md` | Starts the app the repo's way and exercises the slice's acceptance criteria, flag off and on, with evidence. |
+| `skills/linear-poll/scripts/pr-sweep.nu` | Open and recently merged PRs by ticket with CI, review and auto-merge state; feeds PR events to coordinators. |
+| `skills/linear-poll/scripts/selftest.nu` | Offline test of the worktree allocator and branch parsing (temp repo, no network). |
+| `hooks/agent-log.sh` + `skills/agent-workflow/scripts/report.nu` | One JSON line per subagent start/stop and session end; `/agent-workflow report` turns it into per-ticket, per-agent run counts and minutes. |
 
 All agents are generic. Repository specifics come from the repo's `AGENTS.md` (or `CLAUDE.md`,
 `CONTRIBUTING.md`), which every agent reads first and which wins on conflict. Note that Claude Code
@@ -75,6 +81,34 @@ questions (each with why it matters and a proposed default) as a Linear comment,
 Either way the spec ends up **in the Linear task**, which is the only place the pipeline reads it from.
 After three unanswered rounds the coordinator adopts the proposed defaults, records them as
 assumptions in the spec, and continues.
+
+## Closing the loop
+
+- **PR events.** Every poll tick runs `pr-sweep.nu` per repo and sends each coordinator one message with
+  what changed on its PRs: CI failing, changes requested, new comments, approved and green, merged. The
+  coordinator fixes CI from the failing job's log, applies review threads and replies on each, re-requests
+  the reviewer, and after a merge syncs the stack and moves the Linear sub-issue to Done. When every
+  sub-issue is merged the ticket goes to Done.
+- **Human review stays.** The coordinator never approves a PR. With `auto_merge: true` it enables GitHub
+  auto-merge on an approved, green PR (bottom of the stack first); GitHub merges only once branch
+  protection, including your required reviews, is satisfied. Put required reviews in branch protection
+  on each repo, or leave `auto_merge: false`.
+- **Gates before a PR leaves draft**: verifier (lint, types, tests), security-reviewer (audit, secrets,
+  diff review, `/security-review` when available) and, for user-visible or integration slices, a
+  smoke-tester that runs the app and exercises the acceptance criteria with the flag off and on.
+- **Dead coordinators.** A ticket In Progress with no session at all is re-dispatched (the coordinator
+  resumes from its state file), up to `max_redispatch` times, then labelled `agent-stalled` with a comment.
+- **Observability.** Hooks append every subagent start/stop and session end to
+  `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises runs and minutes per ticket
+  and agent, so review churn and slow steps are visible. Token cost is not in the hook payload; use
+  `/cost` in a coordinator or your usage dashboard for that.
+- **Tests.** `/agent-workflow start` runs `selftest.nu` once (temp repo, no network). Run it after any
+  change to the scripts. The pipeline itself is best dry-run on a sandbox repo with
+  `/agent-workflow dispatch <demo ticket>`.
+- **Early spec gate** (`pre_spec_next_cycle: true`): the poll also runs the spec-challenger on your Todo
+  issues in the next cycle, so clarification questions reach you before the cycle starts.
+- **Fresh worktrees**: `ensure-worktree.nu` honours the repo's `.worktreeinclude` (copies gitignored
+  files such as `.env` into a new worktree).
 
 ## Day to day
 

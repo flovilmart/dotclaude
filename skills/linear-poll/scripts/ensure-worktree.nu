@@ -22,6 +22,33 @@ def checkout-branch [wt: string, branch: string, default_branch: string] {
   }
 }
 
+# Copy gitignored files listed in <main>/.worktreeinclude (gitignore syntax,
+# plain paths and * globs) into a freshly created worktree, like Claude Code
+# does for the worktrees it creates itself.
+def copy-worktreeinclude [main_path: string, wt: string] {
+  let inc = $"($main_path)/.worktreeinclude"
+  if not ($inc | path exists) { return }
+  let patterns = (
+    open --raw $inc
+    | lines
+    | each {|l| $l | str trim }
+    | where {|l| ($l != "") and (not ($l | str starts-with "#")) and (not ($l | str starts-with "!")) }
+  )
+  for pat in $patterns {
+    let clean = ($pat | str trim --left --char "/")
+    let matches = (do { cd $main_path; glob --no-dir $clean } | default [])
+    for src in $matches {
+      let rel = ($src | path relative-to $main_path)
+      let ignored = ((do { ^git -C $main_path check-ignore -q $rel } | complete).exit_code == 0)
+      if $ignored {
+        let dest = $"($wt)/($rel)"
+        mkdir ($dest | path dirname)
+        cp $src $dest
+      }
+    }
+  }
+}
+
 def main [repo_path: string, branch: string] {
   # Resolve the main checkout even when repo_path is itself a linked worktree
   let main_path = (^git -C $repo_path rev-parse --path-format=absolute --git-common-dir | str trim | path dirname)
@@ -104,5 +131,6 @@ def main [repo_path: string, branch: string] {
   } else {
     ^git -C $main_path worktree add --quiet -b $branch $wt $"origin/($default_branch)"
   }
+  copy-worktreeinclude $main_path $wt
   print $wt
 }

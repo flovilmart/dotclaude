@@ -96,7 +96,7 @@ Autonomous ticket pipeline for Linear issues **assigned to me** (never the whole
 ```nu
 claude --name dispatcher          # main session; stays free, only dispatches
 /agent-workflow start             # onboarding on first run, then arms the /linear-poll cron
-/agent-workflow status | stop | dispatch <id> | clarify <id>
+/agent-workflow status | stop | dispatch <id> | clarify <id> | report
 claude agents                     # one coordinator session per ticket, in its own <repo>-wt<N> worktree
 claude attach ENG-123             # talk to a coordinator; ← to detach
 ```
@@ -105,4 +105,6 @@ claude attach ENG-123             # talk to a coordinator; ← to detach
 - Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
 - Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
 - Slices become Linear sub-issues, each with its own PR, picked up by priority; dependent ones are stacked via `gh stack` (`skills/stack-pr`); feature flags per the repo's `AGENTS.md`.
+- Gates before a PR leaves draft: `verifier`, `security-reviewer`, `smoke-tester`. The poll relays PR events (CI, reviews, merges); auto-merge only after human approval via branch protection; sub-issues go to Done on merge.
+- Hooks log every subagent run to `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises it. `selftest.nu` tests the scripts offline.
 - Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).

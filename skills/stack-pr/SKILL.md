@@ -61,6 +61,10 @@ Conflicts during `sync` / `rebase`: stop, delegate resolution to an `implementer
 
 Force-pushes are allowed only on the stack's own branches, always `--force-with-lease`, never on the default branch.
 
+## Merging
+
+Humans merge, or GitHub auto-merge merges for them once the repo's branch protection is satisfied: `gh pr merge <n> --auto --squash` (method per repo docs). Enable it only on a PR that is approved and green, bottom of its stack first; never approve a PR yourself, never `--admin`. After a merge: `gh stack sync` (gh stack mode) or retarget and rebase (manual mode), then enable auto-merge on the next PR.
+
 ## Always
 
 - Push and submit after every verified slice; do not batch the whole stack at the end. Early drafts give reviewers the shape of the change.

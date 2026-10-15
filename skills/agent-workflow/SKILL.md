@@ -1,7 +1,7 @@
 ---
 name: agent-workflow
-description: "Control plane for the Linear → worktree → stacked-PR agent workflow. Use when the user says \"start the agent workflow\", \"poll linear\", \"workflow status\", \"stop polling\", \"dispatch ENG-123\", or answers clarification questions for a ticket (\"for ENG-123, the answer is ...\"). Subcommands: start | status | stop | dispatch <id> | clarify <id>."
-argument-hint: "start | status | stop | dispatch <ticket-id> | clarify <ticket-id>"
+description: "Control plane for the Linear → worktree → stacked-PR agent workflow. Use when the user says \"start the agent workflow\", \"poll linear\", \"workflow status\", \"stop polling\", \"dispatch ENG-123\", or answers clarification questions for a ticket (\"for ENG-123, the answer is ...\"). Subcommands: start | status | stop | dispatch <id> | clarify <id> | report [since]."
+argument-hint: "start | status | stop | dispatch <ticket-id> | clarify <ticket-id> | report [since]"
 allowed-tools: [Bash, Read, Write, Edit, Glob, ListAgents, SendMessage, CronCreate, CronList, CronDelete, mcp__plugin_linear_linear__list_teams, mcp__plugin_linear_linear__list_issue_statuses, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_comments, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__save_comment, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_cycles]
 ---
 
@@ -26,6 +26,11 @@ Subcommand = `$0`. Ticket id = `$1` when present.
    tmux display-message -p '#S' 2>/dev/null          # optional; used as trust-dialog fallback
    ```
    If `gh-stack` is missing, say so once and offer `gh extension install github/gh-stack`.
+   Then run the offline self-test of the scripts once (it takes a few seconds and needs only git):
+   ```
+   nu ~/.claude/skills/linear-poll/scripts/selftest.nu
+   ```
+   A failure here means the poll would misbehave; stop and show the failing check.
 3. **Session name.** Call `ListAgents`; the first line is this session's name. If it differs from `dispatcher_name` in the config, update the config to the real name (coordinators message you by it) and tell the user they can run `/rename <name>` to make it stable.
 4. **Poll loop.** Call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with the configured interval and the prompt `/linear-poll`. Report the cron id. The loop fires between turns, so the user can keep working in this session.
 5. Finish with: the cron id, how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).
@@ -46,6 +51,7 @@ Run in parallel and print one compact table plus one line per item:
 
 - `nu ~/.claude/skills/linear-poll/scripts/sessions.nu` → coordinators (name, state, status, waitingFor). A `waitingFor` of `permission prompt` means the user must `claude attach <ticket>` to answer it.
 - `CronList` → whether the poll loop is armed.
+- `nu ~/.claude/skills/linear-poll/scripts/pr-sweep.nu <repo>` per configured repo → open PRs by ticket with `ci` / `review` / `draft` / `autoMerge` columns.
 - `list_issues` with `assignee: "me"` for the current cycle and `label: <needs_spec_label>` → tickets waiting on the human.
 - For each coordinator: the first lines of `~/.claude/agent-workflow/state/<ticket>.md` (phase and slice table), if present.
 
@@ -84,6 +90,10 @@ Use when the user has answered clarification questions for a ticket here in this
 5. Notify the coordinator: run `nu .../resume.nu <ticket> "Spec updated on <ticket>: re-run the spec gate and continue /ticket-workflow"`. If it prints `running <id>`, send the same text with `SendMessage` to the session named `<ticket>`. If it prints `none`, dispatch it (see `dispatch`).
 
 ---
+
+## `report [since]`
+
+Run `nu ~/.claude/skills/agent-workflow/scripts/report.nu` (add `--since <ISO 8601>` when the user gives a period, e.g. "since Monday" → that date). It reads `~/.claude/agent-workflow/log.jsonl`, written by the `SubagentStart` / `SubagentStop` / `SessionEnd` hooks, and prints per worktree and per agent: runs, average and total minutes. Interpret for the user in three or four lines: tickets with many `implementer` + `code-challenger` runs had review churn; many `verifier` runs mean the fast checks are not catching what CI catches; long `repo-scout` runs mean `AGENTS.md` is thin. Add cycle time from GitHub when asked: `gh pr list --state merged --author @me --json createdAt,mergedAt,headRefName` in the repo.
 
 ## Messages from coordinators
 

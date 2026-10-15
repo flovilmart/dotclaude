@@ -99,7 +99,11 @@ Subtasks are not a fixed sequence. Each pick is a fresh decision, and you may st
 - `FAIL` → **implementer** with the verbatim failure ("make the checks pass without weakening them"), then verifier again. Up to three rounds, then escalate with the exact failing output.
 - Formatter changed files → implementer commits them.
 
-**Ship.** `/stack-pr submit` (draft) then `/stack-pr ready <branch>`. Attach the PR to the **sub-issue** (`save_issue` with `links: [{url, title}]`) and to the parent. Sub-issue `state: <review_state>`. Slice table: `pr-open` + PR URL. One log line.
+**Security gate** (when `security_review` is `always`, the default). Delegate **security-reviewer** (brief: TASK = security review of this branch against its base; DONE WHEN = SECURITY REVIEW report). Stop turn. `BLOCK` → implementer with the BLOCKING findings, then security-reviewer again; up to three rounds, then escalate to the human. Never mark a PR ready with an open BLOCKING security finding.
+
+**Smoke test** (when `smoke_test` is `always`, or `auto` and the slice has user-visible, API, CLI or integration behaviour). Delegate **smoke-tester** (brief: TASK = run the app and exercise this slice's acceptance criteria, flag off and on; GUARDRAILS = never edit code, stop anything you start; DONE WHEN = SMOKE TEST report). Stop turn. `FAIL` → implementer with the evidence, then verifier and smoke-tester again; `SKIPPED` → record the reason in the PR body and the state file, do not block. Security gate and smoke test can run in parallel (both background).
+
+**Ship.** `/stack-pr submit` (draft) then `/stack-pr ready <branch>`. Put the verification, security and smoke results in the PR body in three lines, and request review from the humans the repo's docs or CODEOWNERS name (`gh pr edit --add-reviewer`). Attach the PR to the **sub-issue** (`save_issue` with `links: [{url, title}]`) and to the parent. Sub-issue `state: <review_state>`. Slice table: `pr-open` + PR URL. One log line.
 
 **Loop.** Check for messages (pause, priority change, review feedback). Then **Pick** again. Shipping a subtask and then being asked to do something else is normal; the state file and Linear hold everything needed to pick up later.
 
@@ -109,14 +113,23 @@ If the default branch moved (sync reports conflicts) or a lower PR merged, run `
 
 1. `/stack-pr sync` and `/stack-pr view`; confirm every PR has the right base and is ready (not draft).
 2. `save_issue` → `state: <review_state>` on the parent. Post comment `<marker> · <ticket> · ready for review` with the PR list grouped by stack (standalone PRs first, then each stack bottom-up), flag name and default, and "merge stacks bottom-up; run `gh stack sync` (or ask me) after each merge".
-3. Message the dispatcher: `<ticket>: ready` + the PR list.
-4. State file: `phase: in-review`. End your turn. Stay alive for follow-ups.
+3. When `auto_merge` is true and the bottom PR is already approved and green, enable auto-merge on it now (see **Approved and green**).
+4. Message the dispatcher: `<ticket>: ready` + the PR list.
+5. State file: `phase: in-review`. End your turn. Stay alive for PR events and follow-ups; the ticket is done only when every PR is merged (see **Merged**).
+
+## Pull request events (any time after a PR exists)
+
+The poll relays PR events as one message per ticket; humans may also attach and ask. Handle each PR item in its own short cycle, then go back to **Pick** if subtasks remain:
+
+- **CI failing** → `gh pr checks <n>` and `gh run view <run-id> --log-failed` for the failing job; delegate **implementer** with the verbatim failure (brief: GUARDRAILS = fix the cause, never skip or weaken the check), then **verifier**; push with `/stack-pr push`/`rebase`. A failure that also fails on the default branch is not this PR's: say so once in a PR comment and move on.
+- **Changes requested / new comments** → read every unresolved thread (`gh api repos/{owner}/{repo}/pulls/<n>/comments` and `gh pr view <n> --comments`). Delegate **implementer** with the threads (brief: reply per finding `fixed | not fixed (why) | disagree (why)`), then **code-challenger** on the new diff, then **verifier**; push; reply on each thread with what changed (`gh api` to the review comment, or one PR comment listing them); re-request the reviewer (`gh pr edit <n> --add-reviewer <login>`). A disagreement goes to the human as a question, never as a silent skip.
+- **Approved and green** → when `auto_merge` is true: `gh pr merge <n> --auto --<merge_method>` (repo docs win on method). GitHub merges it only once branch protection is satisfied, so human approvals are never bypassed; without branch protection auto-merge would merge on green alone, so the human must have approved before you enable it (check `reviewDecision == APPROVED`). Never approve a PR yourself. For a stack, enable auto-merge on the bottom PR only; the next one is enabled after the bottom merges and the stack is synced.
+- **Merged** → `/stack-pr sync` (retargets and rebases the PRs above); verify the next subtask still passes (verifier); move the sub-issue to `<done_state>` (`save_issue`); if every sub-issue is done, move the ticket to `<done_state>`, post `<marker> · <ticket> · done` with the merged PR list, set the state file `phase: done`, and end. Otherwise, if a subtask was waiting on this merge, go to **Pick**.
 
 ## Follow-ups (messages after Phase 5)
 
-- **Review feedback** ("address comments on PR 2", or a pasted review): delegate implementer on that slice's branch with the findings, then code-challenger, verifier, `/stack-pr rebase`/`push` (cascade), and reply on the Linear issue with what changed.
+- **Review feedback** pasted by a human: same handling as "changes requested" above.
 - **Spec changed**: write the change into `## Spec`, re-run Phase 3 for the remaining (unmerged) slices only.
-- **Lower PR merged**: `/stack-pr sync`; verify the dependent subtasks still pass; if subtasks were waiting on that merge, go back to Phase 4 **Pick**.
 - **Priority changed / new subtask added by a human** (a sub-issue of this ticket appeared or moved): nothing special; the next **Pick** honours it. A human-added sub-issue without a slice definition gets a mini spec gate (spec-challenger brief scoped to that sub-issue) before implementation.
 - **Stop**: ensure the tree is clean and pushed, post `<marker> · <ticket> · paused` with the exact state, end turn.
 
