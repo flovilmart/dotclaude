@@ -63,9 +63,9 @@ Head of Engineering at **tato**. Primary work is a large TypeScript monorepo wit
 
 ## Notifications
 
-- `~/.claude/hooks/notify.sh` fires on Claude stop/input-required events
-- macOS `terminal-notifier` with tmux pane + git branch context
-- Different sounds for completion vs. input needed
+- `~/.claude/hooks/notify.sh` fires only when a session needs me: permission prompts / elicitation dialogs, and background jobs that stop with a `needs input:` line (no "complete" pings)
+- macOS `terminal-notifier` with session name, tmux window + git branch; one notification per session (newer replaces older)
+- Clicking runs `hooks/notify-focus.sh`: jumps to the tmux pane, or opens a tmux window running `claude attach <id>` for background jobs
 
 ---
 

@@ -53,11 +53,11 @@
   "hooks": {
     "Notification": [
       {
-        "matcher": "*",
+        "matcher": "permission_prompt|elicitation_dialog",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/notify.sh 'input_required'"
+            "command": "~/.claude/hooks/notify.sh input_required"
           }
         ]
       }
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/notify.sh 'complete'"
+            "command": "~/.claude/hooks/notify.sh stop"
           }
         ]
       }
