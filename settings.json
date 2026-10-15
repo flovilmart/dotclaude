@@ -18,7 +18,36 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(git worktree:*)"
+      "Bash(git worktree:*)",
+      "mcp__plugin_linear_linear__list_issues",
+      "mcp__plugin_linear_linear__get_issue",
+      "mcp__plugin_linear_linear__list_cycles",
+      "mcp__plugin_linear_linear__list_comments",
+      "mcp__plugin_linear_linear__save_comment",
+      "mcp__plugin_linear_linear__list_issue_statuses",
+      "Bash(claude agents:*)",
+      "Bash(claude logs:*)",
+      "Bash(claude --version:*)",
+      "Bash(gh stack:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr ready:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh extension list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git switch:*)",
+      "Bash(git branch:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh api:*)",
+      "Bash(claude --resume:*)"
     ]
   },
   "model": "opus[1m]",
@@ -43,6 +72,36 @@
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-log.sh"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
@@ -57,5 +116,6 @@
   "theme": "dark-ansi",
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "crossSessionInbound": "accept"
 }
