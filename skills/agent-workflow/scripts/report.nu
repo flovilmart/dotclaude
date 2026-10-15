@@ -18,7 +18,7 @@ def main [--since: string = "", --log: string = ""] {
     | lines
     | where {|l| ($l | str trim) != "" }
     | each {|l| $l | from json }
-    | where {|e| $since == "" or $e.ts > $since }
+    | where {|e| ($since == "") or (($e.ts | into datetime) > ($since | into datetime)) }
   )
 
   let starts = ($events | where {|e| ($e.event.hook_event_name? | default "") == "SubagentStart" })
@@ -28,13 +28,13 @@ def main [--since: string = "", --log: string = ""] {
     $stops
     | each {|s|
         let id = ($s.event.agent_id? | default "")
-        let start = ($starts | where {|x| ($x.event.agent_id? | default "-") == $id } | get -i 0)
+        let start = ($starts | where {|x| ($x.event.agent_id? | default "-") == $id } | get 0?)
         let minutes = if $start == null { null } else {
           (($s.ts | into datetime) - ($start.ts | into datetime)) / 1min
         }
         {
           worktree: ($s.event.cwd? | default "" | path basename)
-          agent: ($s.event.agent_type? | default ($start.event.agent_type? | default "?"))
+          agent: ($s.event.agent_type? | default ($start.event?.agent_type? | default "?"))
           minutes: $minutes
           ts: $s.ts
         }
@@ -50,12 +50,13 @@ def main [--since: string = "", --log: string = ""] {
   | group-by --to-table {|r| $"($r.worktree)|($r.agent)" }
   | each {|g|
       let items = $g.items
+      let mins = ($items | get minutes | compact)
       {
         worktree: $items.0.worktree
         agent: $items.0.agent
         runs: ($items | length)
-        avg_min: ($items | get minutes | compact | math avg | math round --precision 1)
-        total_min: ($items | get minutes | compact | math sum | math round --precision 1)
+        avg_min: (if ($mins | is-empty) { null } else { $mins | math avg | math round --precision 1 })
+        total_min: (if ($mins | is-empty) { null } else { $mins | math sum | math round --precision 1 })
         last: ($items | get ts | sort | last)
       }
     }

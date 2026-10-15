@@ -108,7 +108,10 @@ assumptions in the spec, and continues.
 - **Early spec gate** (`pre_spec_next_cycle: true`): the poll also runs the spec-challenger on your Todo
   issues in the next cycle, so clarification questions reach you before the cycle starts.
 - **Fresh worktrees**: `ensure-worktree.nu` honours the repo's `.worktreeinclude` (copies gitignored
-  files such as `.env` into a new worktree).
+  files such as `.env` into a new worktree). A worktree is reused only when its tree is clean and its
+  branch is finished: the remote branch is merged into the default branch, or it was pushed and GitHub
+  has since deleted it. Turn on "Automatically delete head branches" in each repo so squash-merged
+  branches free their worktree.
 
 ## Day to day
 

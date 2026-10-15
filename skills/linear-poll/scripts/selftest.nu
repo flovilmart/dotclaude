@@ -23,7 +23,7 @@ def main [] {
   let skill_dir = ($env.CURRENT_FILE | path dirname)
   let ensure = $"($skill_dir)/ensure-worktree.nu"
   let sweep = $"($skill_dir)/pr-sweep.nu"
-  let tmp = (^mktemp -d | str trim)
+  let tmp = (^mktemp -d | str trim | path expand)
   let src = $"($tmp)/src"
   let origin = $"($tmp)/origin.git"
   let main = $"($tmp)/demo"
@@ -62,9 +62,27 @@ def main [] {
   assert-eq $wt3 $wt1 "merged and clean worktree is reused"
   assert-eq (^git -C $wt1 branch --show-current | str trim) "feat/demo-3" "reused worktree switched to feat/demo-3"
 
-  "dirty" | save $"($wt1)/dirty.txt"
+  # wt1 (feat/demo-3) and wt2 (feat/demo-2) are fresh branches with no commits: never free
   let wt4 = (^nu $ensure $main feat/demo-4 | str trim)
-  assert-eq $wt4 $"($tmp)/demo-wt3" "dirty worktree is not reused"
+  assert-eq $wt4 $"($tmp)/demo-wt3" "a fresh, never-pushed branch is not free"
+
+  git-commit $wt1 "work on demo-3"
+  ^git -C $wt1 push --quiet -u origin feat/demo-3
+  ^git -C $main merge --quiet --ff-only feat/demo-3
+  ^git -C $main push --quiet origin main
+  "dirty" | save $"($wt1)/dirty.txt"
+  let wt5 = (^nu $ensure $main feat/demo-5 | str trim)
+  assert-eq $wt5 $"($tmp)/demo-wt4" "dirty worktree is not reused even when its branch is merged"
+  ^rm -f $"($wt1)/dirty.txt"
+  let wt6 = (^nu $ensure $main feat/demo-6 | str trim)
+  assert-eq $wt6 $wt1 "cleaned worktree is reused again"
+
+  # remote branch deleted after merge (GitHub "delete head branches"): free even without a merge commit
+  git-commit $wt2 "work on demo-2"
+  ^git -C $wt2 push --quiet -u origin feat/demo-2
+  ^git -C $wt2 push --quiet origin --delete feat/demo-2
+  let wt7 = (^nu $ensure $main feat/demo-7 | str trim)
+  assert-eq $wt7 $wt2 "worktree whose remote branch was deleted is free"
 
   print "pr-sweep.nu"
   assert-eq (^nu $sweep --parse-branch "florent/eng-123-add-thing-s2-schema" | str trim) "ENG-123" "ticket parsed from Linear-style branch"

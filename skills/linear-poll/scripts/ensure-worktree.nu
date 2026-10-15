@@ -4,8 +4,13 @@
 # Non-interactive sibling-worktree allocator. Prints the absolute path of a
 # `<repo>-wt<N>` worktree checked out on <branch>:
 #   1. a worktree already on <branch>, else
-#   2. a free worktree (branch merged into the default branch, clean tree),
-#      switched to <branch>, else
+#   2. a free worktree, switched to <branch>: its tree is clean and its branch
+#      is finished, meaning origin/<branch> is an ancestor of origin/<default>
+#      (merged), or the branch once tracked origin/<branch> and that remote
+#      branch is gone (GitHub deleted it after the merge). A fresh branch that
+#      was never pushed is never free, even though it has no commits of its
+#      own. Squash-merged branches become free once GitHub deletes them, so
+#      enable "automatically delete head branches" on the repo. Else
 #   3. a new `<repo>-wt<N>` with the next index.
 # <branch> is created from origin/<default> when it exists neither locally nor
 # on origin. Layout matches the linear-ticket skill: ~/src/<org>/<repo>-wt<N>.
@@ -35,8 +40,8 @@ def copy-worktreeinclude [main_path: string, wt: string] {
     | where {|l| ($l != "") and (not ($l | str starts-with "#")) and (not ($l | str starts-with "!")) }
   )
   for pat in $patterns {
-    let clean = ($pat | str trim --left --char "/")
-    let matches = (do { cd $main_path; glob --no-dir $clean } | default [])
+    let clean = ($pat | str trim --left --char "/" | str replace --regex '/$' '/**')
+    let matches = (try { do { cd $main_path; glob --no-dir $clean } } catch { [] } | default [])
     for src in $matches {
       let rel = ($src | path relative-to $main_path)
       let ignored = ((do { ^git -C $main_path check-ignore -q $rel } | complete).exit_code == 0)
@@ -46,6 +51,19 @@ def copy-worktreeinclude [main_path: string, wt: string] {
         cp $src $dest
       }
     }
+  }
+}
+
+# A branch is finished when its remote copy is merged into origin/<default>,
+# or when it was pushed with upstream tracking and the remote copy is gone.
+def branch-finished [main_path: string, branch: string, default_branch: string] {
+  let remote_ref = $"refs/remotes/origin/($branch)"
+  let remote_exists = ((do { ^git -C $main_path rev-parse --verify --quiet $remote_ref } | complete).exit_code == 0)
+  if $remote_exists {
+    ((do { ^git -C $main_path merge-base --is-ancestor $remote_ref $"origin/($default_branch)" } | complete).exit_code == 0)
+  } else {
+    let merge = ((do { ^git -C $main_path config --get $"branch.($branch).merge" } | complete).stdout | str trim)
+    $merge == $"refs/heads/($branch)"
   }
 }
 
@@ -94,19 +112,14 @@ def main [repo_path: string, branch: string] {
     return
   }
 
-  # 2. a free worktree: branch merged into origin/<default> and clean tree
-  let merged = (
-    ^git -C $main_path branch --merged $"origin/($default_branch)" --format '%(refname:short)'
-    | lines
-    | each {|b| $b | str trim }
-  )
+  # 2. a free worktree: finished branch (see branch-finished) and clean tree
   let free = (
     $rows
     | where {|r|
-        let is_merged = ($merged | any {|m| $m == $r.branch })
+        let finished = (branch-finished $main_path $r.branch $default_branch)
         let st = (do { ^git -C $r.path status --porcelain } | complete)
         let is_clean = (($st.exit_code == 0) and (($st.stdout | str trim) == ""))
-        $is_merged and $is_clean
+        ($finished and $is_clean)
       }
   )
   if ($free | length) > 0 {

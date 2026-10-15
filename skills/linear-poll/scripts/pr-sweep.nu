@@ -53,7 +53,7 @@ def to-row [pr, state: string, since: string] {
     autoMerge: (($pr.autoMergeRequest? | default null) != null)
     updatedAt: $updated
     mergedAt: ($pr.mergedAt? | default "")
-    changed: (if $since == "" { true } else { $updated > $since })
+    changed: (if ($since == "") or ($updated == "") { true } else { ($updated | into datetime) > ($since | into datetime) })
   }
 }
 
@@ -84,7 +84,7 @@ def main [repo_path?: string, --since: string = "", --limit: int = 100, --parse-
       $merged.stdout
       | from json
       | default []
-      | where {|pr| ($pr.mergedAt? | default "") > $since }
+      | where {|pr| (($pr.mergedAt? | default "") != "") and ((($pr.mergedAt? | default "") | into datetime) > ($since | into datetime)) }
       | each {|pr| to-row $pr "merged" $since }
     }
   }
