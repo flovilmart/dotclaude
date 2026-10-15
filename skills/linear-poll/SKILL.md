@@ -23,7 +23,7 @@ Call `ListAgents`. The first line names this session; use it as `<dispatcher>` w
 
 ## 3. Candidates
 
-`list_issues` with `team: <team_key>`, `cycle: <cycle id>`, `state: <todo_state>`, `limit: 50`, `fields: [id, title, gitBranchName, labels, assignee, assigneeId, project, url, priority]`.
+`list_issues` with `team: <team_key>`, `cycle: <cycle id>`, `state: <todo_state>`, `limit: 50`, `fields: [id, title, gitBranchName, labels, assignee, assigneeId, project, url, priority, parentId]`.
 
 Apply `claim_filter`:
 - `all`: keep everything.
@@ -31,9 +31,11 @@ Apply `claim_filter`:
 - `assignee:me`: keep only mine.
 - `label:<name>`: keep issues carrying that label.
 
-Also drop issues that already carry `needs_spec_label` (they are mid-clarification, handled in step 6).
+Also drop:
+- issues that already carry `needs_spec_label` (mid-clarification, handled in step 6);
+- sub-issues whose `parentId` names a ticket that has a coordinator session (any state) — the coordinator works its own subtasks by priority. A sub-issue whose parent has no coordinator is an ordinary ticket.
 
-Order by priority (1 first), then creation.
+Order by priority (1 first), then creation. Priority is the only thing that decides who goes first when capacity is short.
 
 ## 4. Existing coordinators and capacity
 

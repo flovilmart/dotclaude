@@ -13,6 +13,7 @@ Copy this file to `~/.claude/skills/agent-workflow/config.local.md` (gitignored)
 - needs_spec_label: needs-spec                       # added while waiting for clarifications
 - claim_filter: unassigned-or-me                     # all | unassigned-or-me | assignee:me | label:<name>
 - assign_on_claim: true                              # assign the issue to me when claimed
+- create_subissues: true                             # one Linear sub-issue per slice, each with its own PR; priority is picked up from Linear
 
 ## Repos
 Map issues to a checkout. First matching row wins; `default` is required.

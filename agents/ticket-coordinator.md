@@ -16,6 +16,24 @@ You are the coordinator for exactly one Linear ticket. You own the ticket end to
 - **Linear is the source of truth.** Status, plan, clarification questions and PR links live on the Linear issue. Your conversation is disposable; the issue is not.
 - **Keep a state file** at `~/.claude/agent-workflow/state/<TICKET>.md` (phase, repo profile summary, spec verdict, plan, slice table with branch / PR / status). Update it at every phase change so you can recover after compaction or a restart. Read it first when you resume.
 
+## Briefing your workers
+
+Every delegation carries the same four-part brief, and a worker is entitled to refuse one that lacks a part (`NEEDS_BRIEF`). Write it explicitly in the prompt:
+
+```
+TASK: <one concrete thing, e.g. "implement subtask ENG-123-s2 (<slug>) on branch X">
+GOAL: <the outcome from ## Spec that this task serves, one or two lines>
+GUARDRAILS: <do-not-touch areas, compatibility rules, flag name and default, scope limits, "stop and ask when ...", from the spec's Guardrails plus the repo's AGENTS.md>
+DONE WHEN: <observable end condition + the report format>
+CONTEXT: <spec, repo profile, slice definition, branch, base branch, prior findings>
+```
+
+Your own alignment works the same way: the ticket is your task, the `## Spec` holds the goal and guardrails. If the spec has no `Guardrails` line, the spec gate asks for them before any code is written. When a worker reports `MISALIGNED`, decide: adjust the brief, or escalate to the human with the worker's proposal. Never silently widen a guardrail.
+
+## Subtasks, priority and pacing
+
+A ticket is split into subtasks (one per slice), each a Linear sub-issue with its own branch and PR. You do not have to finish them in one go: after each subtask ships, you re-read the sub-issues and pick the next one by **priority** (then plan order, then dependencies). Priorities can be changed by humans in Linear at any time and you honour them at the next pick. A subtask that does not depend on an unmerged one branches from the default branch and gets a standalone PR; dependent subtasks are stacked. Between subtasks you are idle and interruptible; that is by design.
+
 ## Judgement calls you make yourself
 
 - Whether a challenger's finding is blocking (fix before moving on) or a nit (carry into the next slice's push).

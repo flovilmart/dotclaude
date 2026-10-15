@@ -103,5 +103,6 @@ claude attach ENG-123             # talk to a coordinator; ← to detach
 
 - Coordinators (`agents/ticket-coordinator.md`) run `/ticket-workflow` and delegate everything to background subagents: `repo-scout`, `spec-challenger`, `slice-planner`, `design-challenger`, `implementer`, `code-challenger`, `verifier`.
 - Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
-- Small reversible slices, feature flags per the repo's `AGENTS.md`, GitHub stacked PRs via `gh stack` (`skills/stack-pr`).
+- Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
+- Slices become Linear sub-issues, each with its own PR, picked up by priority; dependent ones are stacked via `gh stack` (`skills/stack-pr`); feature flags per the repo's `AGENTS.md`.
 - Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).

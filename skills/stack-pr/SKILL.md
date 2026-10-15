@@ -21,6 +21,10 @@ gh extension list | grep -i stack
 
 Record the choice in the ticket state file.
 
+## Standalone or stacked
+
+A subtask that depends on an unmerged subtask is stacked on that subtask's branch. A subtask with no unmerged dependency branches from the default branch and gets a standalone PR, even in the middle of a ticket. One ticket can therefore own several small stacks plus standalone PRs; each PR is attached to its Linear sub-issue. Stack only what truly depends.
+
 ## Naming
 
 - Stack base = Linear's `gitBranchName` (already checked out in the worktree); it is slice 1's branch.
@@ -33,7 +37,8 @@ Record the choice in the ticket state file.
 | action | command |
 |--------|---------|
 | init on existing base branch | `gh stack init <gitBranchName>` (adopts the existing branch; trunk = default branch) |
-| add next slice (run from the top branch) | `gh stack add <branch>` |
+| add a dependent slice (run from the branch it depends on, the top of that stack) | `gh stack add <branch>` |
+| start a standalone slice | `git switch -c <branch> origin/<default>`; it is its own one-branch stack (`gh stack init <branch>` when you later stack on it) |
 | push + create/update draft PRs | `gh stack submit --auto` (drafts) |
 | mark a slice ready | `gh pr ready <branch>` |
 | after trunk moved or a lower PR merged | `gh stack sync` (fetch, fast-forward trunk, cascade rebase, push, relink PRs) |

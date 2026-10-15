@@ -90,6 +90,21 @@ claude logs ENG-123                 # recent output
 A coordinator that is idle and unattached for about an hour is stopped by the supervisor; its
 conversation is kept, and the next poll tick (or `claude attach`) restarts it where it left off.
 
+## Briefs, subtasks and priority
+
+- **Every worker needs a brief** with Task, Goal, Guardrails and Done-when, or it answers `NEEDS_BRIEF`
+  and does nothing. The coordinator writes the brief from the ticket's `## Spec` (which has its own
+  `Guardrails:` line, asked for at the spec gate) plus the repo's rules. A worker that sees the task
+  drift from the goal reports `MISALIGNED` instead of improvising.
+- **Slices are Linear sub-issues.** After the plan is approved the coordinator creates one sub-issue per
+  slice under the ticket (priority, dependencies, slice details in the description). Each sub-issue gets
+  its own branch and PR, attached to the sub-issue.
+- **Work is picked by priority, not in a fixed sequence.** After each subtask ships, the coordinator
+  re-reads the sub-issues and picks the highest-priority unblocked one. You can re-prioritise or add
+  sub-issues in Linear at any time; nothing has to be finished in one go. Subtasks that depend on an
+  unmerged subtask are stacked; independent ones branch from the default branch as standalone PRs.
+- Across tickets, the poll loop dispatches by Linear priority within `max_parallel`.
+
 ## Design choices and limits
 
 - **State lives in Linear and git**, not in the dispatcher's memory. States (`Todo` → `In Progress` →
@@ -98,8 +113,8 @@ conversation is kept, and the next poll tick (or `claude attach`) restarts it wh
   compaction. Nothing else is persisted, so there is no ledger to corrupt.
 - **The coordinator claims the issue, not the poller**, so a failed dispatch never leaves a ghost
   "In Progress" ticket.
-- **Slices are sequential** inside a ticket because each one stacks on the previous. Parallelism comes
-  from running several tickets at once (`max_parallel` in the config).
+- **One subtask at a time per ticket** (a coordinator runs one implementer at a time so a ticket's PRs
+  stay coherent). Parallelism comes from running several tickets at once (`max_parallel`).
 - **Coordinators run in `auto` permission mode by default** so they do not stall on prompts. Use
   `acceptEdits` if auto mode is unavailable; then pre-approve the repo's commands in that project's
   `.claude/settings.json` or expect `Needs input` rows in `claude agents`.
