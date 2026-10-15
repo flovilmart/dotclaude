@@ -5,8 +5,8 @@ Copy this file to `~/.claude/skills/agent-workflow/config.local.md` (gitignored)
 `linear-poll`, `ticket-workflow` and `agent-workflow` skills; scripts receive values as arguments.
 
 ## Linear
-- team_key: ENG
-- team_id: 2eae57c8-857d-4322-8904-bc972ffe7c96      # from list_teams; cached so polls skip the lookup
+- team_key: DEMO
+- team_id: 00000000-0000-0000-0000-000000000000      # from list_teams; cached so polls skip the lookup
 - todo_state: Todo                                   # state name whose issues get picked up
 - in_progress_state: In Progress                     # set on claim
 - review_state: In Review                            # set when the stack is ready
@@ -20,9 +20,9 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 
 | match                  | repo              |
 |------------------------|-------------------|
-| project: Platform      | ~/src/tato/platform |
-| label: infra           | ~/src/tato/infra  |
-| default                | ~/src/tato/monorepo |
+| project: Demo App      | ~/src/flovilmart/demo-app |
+| label: infra           | ~/src/flovilmart/infra    |
+| default                | ~/src/flovilmart/dotclaude |
 
 ## Coordinators
 - permission_mode: auto          # auto | acceptEdits | default — mode of each background coordinator session
