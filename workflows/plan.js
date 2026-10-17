@@ -8,7 +8,10 @@
 //   baseBranch (Linear gitBranchName), maxRounds (default 2)
 //
 // Returns { status: APPROVED | NEEDS_HUMAN | FAILED, plan, review, rounds, reports }.
-// The coordinator creates the Linear sub-issues from `plan.slices`.
+// APPROVED means the design-challenger approved; the coordinator then asks the
+// owner to approve the plan (config plan_approval) before it creates the Linear
+// sub-issues from `plan.slices`. Open questions from the planner stop the run
+// before the challenge: there is no point challenging a plan built on a guess.
 
 export const meta = {
   name: 'plan',
@@ -23,6 +26,7 @@ export const meta = {
 const a = args || {}
 const maxRounds = a.maxRounds || 2
 const asText = (v) => (typeof v === 'string' ? v : JSON.stringify(v, null, 2))
+const questions = (p) => p.openQuestions || []
 
 const SLICE = {
   type: 'object',
@@ -115,7 +119,7 @@ let plan = await agent(planBrief(), { agentType: 'slice-planner', schema: PLAN, 
 if (!plan) return { status: 'FAILED', reason: 'slice-planner returned nothing' }
 const reports = { plan1: plan.report }
 if (plan.status !== 'OK') return { status: 'NEEDS_HUMAN', reason: plan.report, stage: 'plan', plan }
-if ((plan.openQuestions || []).length) log(`planner has ${plan.openQuestions.length} blocking question(s) for the human`)
+if (questions(plan).length) return { status: 'NEEDS_HUMAN', reason: 'blocking questions for the human', stage: 'plan', openQuestions: questions(plan), plan, reports }
 
 phase('Challenge')
 let review = null
@@ -133,14 +137,7 @@ while (true) {
   if (!plan) return { status: 'FAILED', reason: 'slice-planner returned nothing on revision', reports }
   reports[`plan${rounds + 1}`] = plan.report
   if (plan.status !== 'OK') return { status: 'NEEDS_HUMAN', reason: plan.report, stage: 'revise', plan, reports }
+  if (questions(plan).length) return { status: 'NEEDS_HUMAN', reason: 'blocking questions for the human', stage: 'revise', openQuestions: questions(plan), plan, reports }
 }
 
-return {
-  status: (plan.openQuestions || []).length ? 'NEEDS_HUMAN' : 'APPROVED',
-  reason: (plan.openQuestions || []).length ? 'blocking questions for the human' : '',
-  openQuestions: plan.openQuestions || [],
-  plan,
-  review,
-  rounds,
-  reports,
-}
+return { status: 'APPROVED', reason: '', openQuestions: [], plan, review, rounds, reports }

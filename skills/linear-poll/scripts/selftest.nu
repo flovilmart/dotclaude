@@ -3,7 +3,8 @@
 #
 # Builds a throwaway repo with a local "origin", then exercises
 # ensure-worktree.nu (create, reuse, free-after-merge, worktree path as input,
-# .worktreeinclude copy) and pr-sweep.nu's branch → ticket parsing.
+# .worktreeinclude copy, ticket holds) and pr-sweep.nu's branch → ticket parsing,
+# then runs the saved workflows' regression tests (workflows/test) when node is installed.
 # No network, no Linear, no claude. Prints ok/FAIL per check; exit code 1 on failure.
 
 def assert-eq [actual, expected, label: string] {
@@ -84,10 +85,38 @@ def main [] {
   let wt7 = (^nu $ensure $main feat/demo-7 | str trim)
   assert-eq $wt7 $wt2 "worktree whose remote branch was deleted is free"
 
+  # a worktree held by a ticket is not free, even once its branch is merged
+  let held = (^nu $ensure $main feat/demo-8 --ticket DEMO-8 | str trim)
+  assert-eq (open --raw (^git -C $held rev-parse --absolute-git-dir | str trim | path join agent-ticket) | str trim) "DEMO-8" "--ticket marks the worktree as held"
+  assert-eq (^git -C $held status --porcelain | str trim) "" "the hold leaves the tree clean"
+  git-commit $held "work on demo-8"
+  ^git -C $held push --quiet -u origin feat/demo-8
+  ^git -C $main merge --quiet --ff-only feat/demo-8
+  ^git -C $main push --quiet origin main
+  let other = (^nu $ensure $main feat/demo-9 | str trim)
+  assert-eq ($other != $held) true "a held worktree is not given to another branch after its branch merges"
+  let back = (^nu $ensure $main feat/demo-8-s2 --ticket DEMO-8 | str trim)
+  assert-eq $back $held "the holding ticket gets its worktree back"
+  assert-eq (^git -C $held branch --show-current | str trim) "feat/demo-8" "getting it back does not switch its branch"
+  ^rm -f (^git -C $held rev-parse --absolute-git-dir | str trim | path join agent-ticket)
+  let released = (^nu $ensure $main feat/demo-10 | str trim)
+  assert-eq $released $held "a released worktree is free again"
+
   print "pr-sweep.nu"
   assert-eq (^nu $sweep --parse-branch "florent/eng-123-add-thing-s2-schema" | str trim) "ENG-123" "ticket parsed from Linear-style branch"
   assert-eq (^nu $sweep --parse-branch "main" | str trim) "" "no ticket in main"
 
   ^rm -rf $tmp
+
+  print "workflows (node --test)"
+  let tests = ($skill_dir | path join ../../../workflows/test | path expand)
+  if (which node | is-empty) {
+    print "  skip node not installed"
+  } else {
+    let files = (glob $"($tests)/*.test.mjs")
+    let out = (do { ^node --test ...$files } | complete)
+    let summary = ($out.stdout | lines | where {|l| $l =~ '^# (pass|fail) ' } | str replace '# ' '' | str join ", ")
+    assert-eq $out.exit_code 0 $"plan.js and subtask.js regression tests \(($summary)\)"
+  }
   print "selftest: all passed"
 }

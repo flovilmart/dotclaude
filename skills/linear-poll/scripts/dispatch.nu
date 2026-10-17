@@ -2,7 +2,8 @@
 # dispatch.nu <repo-path> <ticket-id> <branch> [--dispatcher <session-name>]
 #             [--permission-mode auto] [--model <alias>] [--skill ticket-workflow]
 #
-# 1. Allocates a sibling worktree for <ticket-id> on <branch> (ensure-worktree.nu).
+# 1. Allocates a sibling worktree for <ticket-id> on <branch> and marks it as held
+#    by the ticket (ensure-worktree.nu --ticket).
 # 2. Starts a background coordinator session there:
 #      claude --bg --name <ticket-id> --agent ticket-coordinator "/ticket-workflow <ticket-id> <dispatcher>"
 # 3. Prints one JSON object: {ticket, worktree, branch, mode, session}
@@ -24,7 +25,7 @@ def main [
 ] {
   if "CLAUDECODE" in $env { hide-env CLAUDECODE }
   let skill_dir = ($env.CURRENT_FILE | path dirname)
-  let wt = (^nu $"($skill_dir)/ensure-worktree.nu" $repo_path $branch | str trim)
+  let wt = (^nu $"($skill_dir)/ensure-worktree.nu" $repo_path $branch --ticket $ticket | str trim)
   if $wt == "" {
     error make { msg: "ensure-worktree.nu returned no path" }
   }

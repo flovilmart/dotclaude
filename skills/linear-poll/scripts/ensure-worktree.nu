@@ -1,19 +1,27 @@
 #!/usr/bin/env nu
-# ensure-worktree.nu <repo-path> <branch>
+# ensure-worktree.nu <repo-path> <branch> [--ticket <id>]
 #
 # Non-interactive sibling-worktree allocator. Prints the absolute path of a
 # `<repo>-wt<N>` worktree checked out on <branch>:
 #   1. a worktree already on <branch>, else
-#   2. a free worktree, switched to <branch>: its tree is clean and its branch
+#   2. with --ticket, the worktree that ticket already holds (left on whatever
+#      slice branch its coordinator had checked out), else
+#   3. a free worktree, switched to <branch>: not held by a ticket, its tree is clean and its branch
 #      is finished, meaning origin/<branch> is an ancestor of origin/<default>
 #      (merged), or the branch once tracked origin/<branch> and that remote
 #      branch is gone (GitHub deleted it after the merge). A fresh branch that
 #      was never pushed is never free, even though it has no commits of its
 #      own. Squash-merged branches become free once GitHub deletes them, so
 #      enable "automatically delete head branches" on the repo. Else
-#   3. a new `<repo>-wt<N>` with the next index.
+#   4. a new `<repo>-wt<N>` with the next index.
 # <branch> is created from origin/<default> when it exists neither locally nor
 # on origin. Layout matches the linear-ticket skill: ~/src/<org>/<repo>-wt<N>.
+#
+# --ticket writes the ticket id to <worktree git dir>/agent-ticket (outside the
+# working tree, so the tree stays clean). A coordinator keeps working in its
+# worktree across slices, and a merged, clean slice branch must not make the
+# worktree look free while the ticket has slices left. The coordinator deletes
+# the file when the ticket is done:  rm -f "$(git rev-parse --absolute-git-dir)/agent-ticket"
 
 def checkout-branch [wt: string, branch: string, default_branch: string] {
   let local_exists = ((^git -C $wt branch --list $branch | str trim) != "")
@@ -54,6 +62,20 @@ def copy-worktreeinclude [main_path: string, wt: string] {
   }
 }
 
+def lock-file [wt: string] {
+  $"(^git -C $wt rev-parse --absolute-git-dir | str trim)/agent-ticket"
+}
+
+# Ticket id holding the worktree, or "" when none
+def holder [wt: string] {
+  let f = (lock-file $wt)
+  if ($f | path exists) { open --raw $f | str trim } else { "" }
+}
+
+def hold [wt: string, ticket: string] {
+  if $ticket != "" { $ticket | save --force (lock-file $wt) }
+}
+
 # A branch is finished when its remote copy is merged into origin/<default>,
 # or when it was pushed with upstream tracking and the remote copy is gone.
 def branch-finished [main_path: string, branch: string, default_branch: string] {
@@ -67,7 +89,7 @@ def branch-finished [main_path: string, branch: string, default_branch: string] 
   }
 }
 
-def main [repo_path: string, branch: string] {
+def main [repo_path: string, branch: string, --ticket: string = ""] {
   # Resolve the main checkout even when repo_path is itself a linked worktree
   let main_path = (^git -C $repo_path rev-parse --path-format=absolute --git-common-dir | str trim | path dirname)
   let repo_name = ($main_path | path basename)
@@ -108,14 +130,26 @@ def main [repo_path: string, branch: string] {
   # 1. already checked out somewhere
   let same = ($rows | where branch == $branch)
   if ($same | length) > 0 {
-    print ($same | first | get path)
+    let wt = ($same | first | get path)
+    hold $wt $ticket
+    print $wt
     return
   }
 
-  # 2. a free worktree: finished branch (see branch-finished) and clean tree
+  # 2. the worktree this ticket already holds
+  if $ticket != "" {
+    let held = ($rows | where {|r| (holder $r.path) == $ticket })
+    if ($held | length) > 0 {
+      print ($held | first | get path)
+      return
+    }
+  }
+
+  # 3. a free worktree: held by no ticket, finished branch (see branch-finished) and clean tree
   let free = (
     $rows
     | where {|r|
+        if (holder $r.path) != "" { return false }
         let finished = (branch-finished $main_path $r.branch $default_branch)
         let st = (do { ^git -C $r.path status --porcelain } | complete)
         let is_clean = (($st.exit_code == 0) and (($st.stdout | str trim) == ""))
@@ -125,11 +159,12 @@ def main [repo_path: string, branch: string] {
   if ($free | length) > 0 {
     let wt = ($free | first | get path)
     checkout-branch $wt $branch $default_branch
+    hold $wt $ticket
     print $wt
     return
   }
 
-  # 3. create the next index
+  # 4. create the next index
   mut idx = 1
   while ($"($parent)/($repo_name)-wt($idx)" | path exists) {
     $idx += 1
@@ -145,5 +180,6 @@ def main [repo_path: string, branch: string] {
     ^git -C $main_path worktree add --quiet -b $branch $wt $"origin/($default_branch)"
   }
   copy-worktreeinclude $main_path $wt
+  hold $wt $ticket
   print $wt
 }

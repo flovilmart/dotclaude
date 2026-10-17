@@ -15,9 +15,15 @@
 //   security      boolean: run the security gate (config security_review)
 //   smoke         boolean: run the smoke test (coordinator resolves config smoke_test auto/always/never)
 //   maxRounds     fix rounds per gate before giving up (default 3)
+//   maxLines      changed lines (excluding tests and generated code) above which the slice must be split (default 800)
+//
+// Every commit that reaches READY has been through an approving code review:
+// fixes made for the verifier or the gates are reviewed again at the end.
 //
 // Returns one structured result; the coordinator ships the PR, updates Linear
 // and decides what to do with status != READY. Linear is never touched here.
+// The READY result carries what the owner's validation packet needs:
+// coverage, smokeCriteria, uncertain, deviations, carried, changedLines.
 
 export const meta = {
   name: 'subtask',
@@ -26,13 +32,15 @@ export const meta = {
   phases: [
     { title: 'Implement', detail: 'implementer, test first' },
     { title: 'Review', detail: 'code-challenger with bounded fix rounds' },
-    { title: 'Verify', detail: 'verifier with bounded fix rounds' },
+    { title: 'Verify', detail: 'verifier with bounded fix rounds, slice size gate' },
     { title: 'Gates', detail: 'security-reviewer and smoke-tester in parallel' },
+    { title: 'Final review', detail: 'code-challenger on fixes made after the first review' },
   ],
 }
 
 const a = args || {}
 const maxRounds = a.maxRounds || 3
+const maxLines = a.maxLines || 800
 const asText = (v) => (typeof v === 'string' ? v : JSON.stringify(v, null, 2))
 
 // ---------- schemas (StructuredOutput) ----------
@@ -44,11 +52,12 @@ const IMPL = {
     tests: { type: 'array', items: { type: 'string' } },
     checks: { type: 'array', items: { type: 'string' } },
     deviations: { type: 'array', items: { type: 'string' } },
+    uncertain: { type: 'array', items: { type: 'string' }, description: 'decisions made without explicit guidance, assumptions, and code you are least sure about (path:line — why); the owner reviews these first' },
     question: { type: 'string' },
     findings: { type: 'array', items: { type: 'string' }, description: 'per review finding: "fixed | not fixed (why) | disagree (why): <finding>"' },
     report: { type: 'string' },
   },
-  required: ['status', 'commits', 'report'],
+  required: ['status', 'commits', 'uncertain', 'report'],
 }
 const FINDING = {
   type: 'object',
@@ -62,6 +71,11 @@ const REVIEW = {
     blocking: { type: 'array', items: FINDING },
     should: { type: 'array', items: FINDING },
     nits: { type: 'array', items: FINDING },
+    coverage: {
+      type: 'array',
+      description: 'one row per acceptance criterion of the slice: the test that proves it, or "none"',
+      items: { type: 'object', properties: { criterion: { type: 'string' }, test: { type: 'string' } }, required: ['criterion', 'test'] },
+    },
     report: { type: 'string' },
   },
   required: ['verdict', 'blocking', 'should', 'nits', 'report'],
@@ -73,9 +87,10 @@ const VERIFY = {
     failures: { type: 'string', description: 'verbatim, trimmed failing output' },
     formatterChanged: { type: 'array', items: { type: 'string' } },
     flaky: { type: 'array', items: { type: 'string' } },
+    changedLines: { type: 'integer', description: 'added + removed lines in git diff --numstat <base>...HEAD, excluding tests, lockfiles and generated files' },
     report: { type: 'string' },
   },
-  required: ['result', 'report'],
+  required: ['result', 'changedLines', 'report'],
 }
 const SECURITY = {
   type: 'object',
@@ -94,6 +109,15 @@ const SMOKE = {
     result: { type: 'string', enum: ['PASS', 'FAIL', 'SKIPPED', 'NEEDS_BRIEF'] },
     reason: { type: 'string' },
     evidence: { type: 'array', items: { type: 'string' } },
+    criteria: {
+      type: 'array',
+      description: 'one row per acceptance criterion exercised',
+      items: {
+        type: 'object',
+        properties: { criterion: { type: 'string' }, how: { type: 'string' }, flagOff: { type: 'string' }, flagOn: { type: 'string' }, evidence: { type: 'string' } },
+        required: ['criterion', 'how', 'evidence'],
+      },
+    },
     report: { type: 'string' },
   },
   required: ['result', 'report'],
@@ -117,7 +141,7 @@ GUARDRAILS: the Guardrails of the spec and of the slice; the repository's AGENTS
 const implementBrief = () => `TASK: implement this slice on branch ${a.branch} using red → green → refactor, committing after each green state.
 GOAL: ${a.slice && a.slice.goal ? a.slice.goal : 'the part of the spec this slice covers (see Slice and Spec in CONTEXT)'}
 ${guardrails()}
-DONE WHEN: the slice's "done when" holds, the scoped fast checks pass, the tree is clean, and you return the SLICE REPORT as structured output (status DONE | BLOCKED | PARTIAL).
+DONE WHEN: the slice's "done when" holds, the scoped fast checks pass, the tree is clean, and you return the SLICE REPORT as structured output (status DONE | BLOCKED | PARTIAL), listing under "uncertain" every decision a human should double-check.
 ${context()}`
 
 const fixBrief = (kind, items, extra) => `TASK: apply these ${kind} findings on branch ${a.branch}; for each one answer "fixed | not fixed (why) | disagree (why)" in the findings field. Commit per repo convention.
@@ -129,16 +153,19 @@ ${asText(items)}
 ${extra ? '\nADDITIONAL:\n' + extra : ''}
 ${context()}`
 
-const reviewBrief = () => `TASK: adversarially review the diff of ${a.branch} against ${a.base} (git diff ${a.base}...HEAD) for exactly this slice.
+// fixes: commits added after the last approving review, or null for the whole slice
+const reviewBrief = (fixes) => `TASK: adversarially review ${fixes
+  ? `only the commits added to ${a.branch} after the last approved review: ${fixes.join('; ')} (git show each one; read git diff ${a.base}...HEAD for context only)`
+  : `the diff of ${a.branch} against ${a.base} (git diff ${a.base}...HEAD) for exactly this slice`}.
 GOAL: only correct, tested, in-scope, reversible code reaches the PR.
 GUARDRAILS: read-only (you may run scoped tests); judge against the spec, the slice and the repo's AGENTS.md, not personal taste; a finding needs evidence (path:line or a scenario).
-DONE WHEN: you return the CODE REVIEW as structured output (verdict APPROVE | REQUEST_CHANGES with blocking / should / nits).
+DONE WHEN: you return the CODE REVIEW as structured output (verdict APPROVE | REQUEST_CHANGES with blocking / should / nits, and coverage: for each acceptance criterion of the slice, the test that proves it as path:line, or "none").
 ${context()}`
 
-const verifyBrief = () => `TASK: run the repository's full quality gates on branch ${a.branch} exactly as the repo profile and CI define them.
-GOAL: the PR is green on CI the first time.
+const verifyBrief = () => `TASK: run the repository's full quality gates on branch ${a.branch} exactly as the repo profile and CI define them, and measure the slice size.
+GOAL: the PR is green on CI the first time, and small enough for a human to review.
 GUARDRAILS: never edit source; you may run the formatter in write mode and report changed files; re-run a failing test once to detect flakiness; leave the tree as you found it apart from formatter output.
-DONE WHEN: you return the VERIFICATION as structured output (PASS | FAIL with verbatim failures).
+DONE WHEN: you return the VERIFICATION as structured output (PASS | FAIL with verbatim failures, and changedLines from git diff --numstat ${a.base}...HEAD excluding tests, lockfiles and generated files).
 ${context()}`
 
 const securityBrief = () => `TASK: security review of ${a.branch} against ${a.base}: dependency audit, secret scan, and a diff review for authz, injection, data exposure and unsafe defaults.
@@ -148,125 +175,169 @@ DONE WHEN: you return the SECURITY REVIEW as structured output (PASS | BLOCK).
 ${context()}`
 
 const smokeBrief = () => `TASK: start the app or service the way the repo documents and exercise this slice's acceptance criteria end to end, with ${a.flag ? `flag ${a.flag} off and on` : 'the new behaviour'}.
-GOAL: the slice works outside the unit tests.
+GOAL: the slice works outside the unit tests, with evidence the owner can check without re-running it.
 GUARDRAILS: never edit code or flip the flag by editing source; stop everything you start; if you cannot run at all, return SKIPPED with the exact reason and command.
-DONE WHEN: you return the SMOKE TEST as structured output (PASS | FAIL | SKIPPED) with evidence paths or response excerpts.
+DONE WHEN: you return the SMOKE TEST as structured output (PASS | FAIL | SKIPPED) with one criteria row per acceptance criterion (how exercised, flag off, flag on, evidence path or response excerpt).
 ${context()}`
 
-// ---------- helpers ----------
+// ---------- state and helpers ----------
+const commits = []
+const reports = {}
+const uncertain = []
+const deviations = []
 const carried = { should: [], nits: [] }
+const rounds = { review: 0, verify: 0, security: 0, smoke: 0 }
+let reviewed = 0 // commits[0, reviewed) have been through an approving code review
+
+const note = (key, report) => {
+  let n = 1
+  while (reports[`${key}${n}`] !== undefined) n++
+  reports[`${key}${n}`] = report
+}
+const uniq = (findings) => [...new Map(findings.map((f) => [`${f.location}|${f.issue}`, f])).values()]
 const result = (status, extra) => ({
   status, // READY | BLOCKED | NEEDS_HUMAN | FAILED
   ticket: a.ticket, branch: a.branch, base: a.base,
-  commits: [], rounds: { review: 0, verify: 0, security: 0, smoke: 0 },
-  carried, reports: {},
+  commits, rounds, reports, uncertain, deviations,
+  carried: { should: uniq(carried.should), nits: uniq(carried.nits) },
   ...extra,
 })
-const stop = (impl) => impl && (impl.status === 'BLOCKED' || impl.status === 'NEEDS_BRIEF' || impl.status === 'MISALIGNED')
 
-// ---------- Implement ----------
-phase('Implement')
-let impl = await agent(implementBrief(), { agentType: 'implementer', schema: IMPL, phase: 'Implement', label: `implement ${a.branch}` })
-if (!impl) return result('FAILED', { reason: 'implementer returned nothing' })
-const commits = [...(impl.commits || [])]
-const reports = { implement: impl.report }
-if (stop(impl)) return result('BLOCKED', { commits, reports, question: impl.question || impl.report, stage: 'implement', implStatus: impl.status })
-if (impl.status === 'PARTIAL') log(`implementer reported PARTIAL: ${impl.report.slice(0, 200)}`)
+// halt() ends the workflow from any depth with a non-READY result
+class Halt { constructor(res) { this.res = res } }
+const halt = (status, extra) => { throw new Halt(result(status, extra)) }
 
-// ---------- Review ----------
-phase('Review')
-let review = null
-let reviewRounds = 0
-while (true) {
-  review = await agent(reviewBrief(), { agentType: 'code-challenger', schema: REVIEW, phase: 'Review', label: `review r${reviewRounds + 1}` })
-  if (!review) return result('FAILED', { commits, reports, reason: 'code-challenger returned nothing' })
-  reports[`review${reviewRounds + 1}`] = review.report
-  carried.should.push(...(review.should || []))
-  carried.nits.push(...(review.nits || []))
-  if (review.verdict === 'NEEDS_BRIEF' || review.verdict === 'MISALIGNED') return result('NEEDS_HUMAN', { commits, reports, reason: review.report, stage: 'review' })
-  if (review.verdict === 'APPROVE' || (review.blocking || []).length === 0) break
-  reviewRounds++
-  if (reviewRounds > maxRounds) return result('NEEDS_HUMAN', { commits, reports, reason: `review still blocking after ${maxRounds} fix rounds`, stage: 'review', open: review.blocking })
-  log(`review round ${reviewRounds}: ${review.blocking.length} blocking finding(s)`)
-  impl = await agent(fixBrief('review', { blocking: review.blocking, should: review.should }), { agentType: 'implementer', schema: IMPL, phase: 'Review', label: `fix review r${reviewRounds}` })
-  if (!impl) return result('FAILED', { commits, reports, reason: 'implementer returned nothing' })
+const stops = ['BLOCKED', 'NEEDS_BRIEF', 'MISALIGNED']
+const implement = async (brief, phase, label, key) => {
+  const impl = await agent(brief, { agentType: 'implementer', schema: IMPL, phase, label })
+  if (!impl) halt('FAILED', { reason: 'implementer returned nothing', stage: label })
   commits.push(...(impl.commits || []))
-  reports[`fixReview${reviewRounds}`] = impl.report
-  if (stop(impl)) return result('BLOCKED', { commits, reports, question: impl.question || impl.report, stage: 'review-fix' })
+  uncertain.push(...(impl.uncertain || []))
+  deviations.push(...(impl.deviations || []))
+  note(key, impl.report)
+  if (stops.includes(impl.status)) halt('BLOCKED', { question: impl.question || impl.report, stage: label, implStatus: impl.status })
+  return impl
 }
 
-// ---------- Verify ----------
-phase('Verify')
-let verify = null
-let verifyRounds = 0
-while (true) {
-  verify = await agent(verifyBrief(), { agentType: 'verifier', schema: VERIFY, phase: 'Verify', label: `verify r${verifyRounds + 1}` })
-  if (!verify) return result('FAILED', { commits, reports, reason: 'verifier returned nothing' })
-  reports[`verify${verifyRounds + 1}`] = verify.report
-  if (verify.result === 'NEEDS_BRIEF') return result('NEEDS_HUMAN', { commits, reports, reason: verify.report, stage: 'verify' })
-  const formatter = verify.formatterChanged || []
-  if (verify.result === 'PASS' && formatter.length === 0) break
-  verifyRounds++
-  if (verifyRounds > maxRounds) return result('NEEDS_HUMAN', { commits, reports, reason: `checks still failing after ${maxRounds} fix rounds`, stage: 'verify', failures: verify.failures })
-  const ask = verify.result === 'PASS'
-    ? `commit the formatter changes to: ${formatter.join(', ')}`
-    : `make the checks pass without weakening them. Verbatim failure:\n${verify.failures || verify.report}`
-  log(`verify round ${verifyRounds}: ${verify.result}`)
-  impl = await agent(fixBrief('verification', [ask]), { agentType: 'implementer', schema: IMPL, phase: 'Verify', label: `fix verify r${verifyRounds}` })
-  if (!impl) return result('FAILED', { commits, reports, reason: 'implementer returned nothing' })
-  commits.push(...(impl.commits || []))
-  reports[`fixVerify${verifyRounds}`] = impl.report
-  if (stop(impl)) return result('BLOCKED', { commits, reports, question: impl.question || impl.report, stage: 'verify-fix' })
-}
-
-// ---------- Gates: security + smoke in parallel, each with bounded fix rounds ----------
-phase('Gates')
-let security = null
-let smoke = null
-let securityRounds = 0
-let smokeRounds = 0
-const runGates = async () => parallel([
-  () => (a.security === false ? Promise.resolve({ verdict: 'PASS', blocking: [], should: [], report: 'security review disabled by config' })
-    : agent(securityBrief(), { agentType: 'security-reviewer', schema: SECURITY, phase: 'Gates', label: `security r${securityRounds + 1}` })),
-  () => (a.smoke === false ? Promise.resolve({ result: 'SKIPPED', reason: 'smoke test not requested for this slice', report: 'smoke test skipped by config' })
-    : agent(smokeBrief(), { agentType: 'smoke-tester', schema: SMOKE, phase: 'Gates', label: `smoke r${smokeRounds + 1}` })),
-])
-while (true) {
-  const [sec, smk] = await runGates()
-  security = sec || { verdict: 'BLOCK', blocking: [], should: [], report: 'security-reviewer returned nothing' }
-  smoke = smk || { result: 'FAIL', report: 'smoke-tester returned nothing' }
-  reports[`security${securityRounds + 1}`] = security.report
-  reports[`smoke${smokeRounds + 1}`] = smoke.report
-  carried.should.push(...(security.should || []))
-  if (security.verdict === 'NEEDS_BRIEF' || smoke.result === 'NEEDS_BRIEF') return result('NEEDS_HUMAN', { commits, reports, reason: 'a gate asked for a better brief', stage: 'gates' })
-  const secBlock = security.verdict === 'BLOCK'
-  const smokeFail = smoke.result === 'FAIL'
-  if (!secBlock && !smokeFail) break
-  if (secBlock) securityRounds++
-  if (smokeFail) smokeRounds++
-  if (securityRounds > maxRounds || smokeRounds > maxRounds) {
-    return result('NEEDS_HUMAN', { commits, reports, reason: `gates still failing after ${maxRounds} fix rounds`, stage: 'gates', open: { security: security.blocking, smoke: smoke.report } })
+// Review until code-challenger approves; fix rounds are reviewed by the next round.
+// Only the approving round's should / nits are carried: earlier ones went to the fixer.
+const reviewLoop = async (fixes, label) => {
+  for (let round = 0; ; round++) {
+    const review = await agent(reviewBrief(fixes), { agentType: 'code-challenger', schema: REVIEW, phase: fixes ? 'Final review' : 'Review', label: `${label} r${round + 1}` })
+    if (!review) halt('FAILED', { reason: 'code-challenger returned nothing', stage: label })
+    note('review', review.report)
+    if (review.verdict === 'NEEDS_BRIEF' || review.verdict === 'MISALIGNED') halt('NEEDS_HUMAN', { reason: review.report, stage: label })
+    if (review.verdict === 'APPROVE' || (review.blocking || []).length === 0) {
+      reviewed = commits.length
+      carried.should.push(...(review.should || []))
+      carried.nits.push(...(review.nits || []))
+      return review
+    }
+    if (round >= maxRounds) halt('NEEDS_HUMAN', { reason: `review still blocking after ${maxRounds} fix rounds`, stage: label, open: review.blocking })
+    rounds.review++
+    log(`${label} round ${round + 1}: ${review.blocking.length} blocking finding(s)`)
+    await implement(fixBrief('review', { blocking: review.blocking, should: review.should }), fixes ? 'Final review' : 'Review', `fix ${label} r${round + 1}`, 'fixReview')
   }
-  const items = []
-  if (secBlock) items.push({ security: security.blocking })
-  if (smokeFail) items.push({ smoke: smoke.report, evidence: smoke.evidence || [] })
-  log(`gates: ${secBlock ? 'security BLOCK ' : ''}${smokeFail ? 'smoke FAIL' : ''}`)
-  impl = await agent(fixBrief('gate', items, 'Security findings take the safer fix.'), { agentType: 'implementer', schema: IMPL, phase: 'Gates', label: 'fix gates' })
-  if (!impl) return result('FAILED', { commits, reports, reason: 'implementer returned nothing' })
-  commits.push(...(impl.commits || []))
-  reports[`fixGates${securityRounds + smokeRounds}`] = impl.report
-  if (stop(impl)) return result('BLOCKED', { commits, reports, question: impl.question || impl.report, stage: 'gates-fix' })
-  // re-verify after a gate fix, once, before re-running the gates
-  const reverify = await agent(verifyBrief(), { agentType: 'verifier', schema: VERIFY, phase: 'Gates', label: 'verify after gate fix' })
-  if (!reverify || reverify.result !== 'PASS') return result('NEEDS_HUMAN', { commits, reports, reason: 'checks failed after a gate fix', stage: 'gates', failures: reverify ? reverify.failures : '' })
 }
 
-return result('READY', {
-  commits,
-  rounds: { review: reviewRounds, verify: verifyRounds, security: securityRounds, smoke: smokeRounds },
-  verification: 'PASS',
-  security: security.verdict,
-  smoke: smoke.result,
-  smokeReason: smoke.reason || '',
-  reports,
-})
+// Verify until green with no formatter changes; failures go back to the implementer.
+const verifyLoop = async (label, phase) => {
+  for (let round = 0; ; round++) {
+    const verify = await agent(verifyBrief(), { agentType: 'verifier', schema: VERIFY, phase, label: `${label} r${round + 1}` })
+    if (!verify) halt('FAILED', { reason: 'verifier returned nothing', stage: label })
+    note('verify', verify.report)
+    if (verify.result === 'NEEDS_BRIEF') halt('NEEDS_HUMAN', { reason: verify.report, stage: label })
+    const formatter = verify.formatterChanged || []
+    if (verify.result === 'PASS' && formatter.length === 0) return verify
+    if (round >= maxRounds) halt('NEEDS_HUMAN', { reason: `checks still failing after ${maxRounds} fix rounds`, stage: label, failures: verify.failures })
+    rounds.verify++
+    const ask = verify.result === 'PASS'
+      ? `commit the formatter changes to: ${formatter.join(', ')}`
+      : `make the checks pass without weakening them. Verbatim failure:\n${verify.failures || verify.report}`
+    log(`${label} round ${round + 1}: ${verify.result}`)
+    await implement(fixBrief('verification', [ask]), phase, `fix ${label} r${round + 1}`, 'fixVerify')
+  }
+}
+
+const SECURITY_OFF = { verdict: 'PASS', blocking: [], should: [], report: 'security review disabled by config' }
+const SMOKE_OFF = { result: 'SKIPPED', reason: 'smoke test not requested for this slice', report: 'smoke test skipped by config' }
+
+try {
+  // ---------- Implement ----------
+  phase('Implement')
+  const impl = await implement(implementBrief(), 'Implement', `implement ${a.branch}`, 'implement')
+  if (impl.status === 'PARTIAL') {
+    log(`implementer reported PARTIAL, asking it to finish: ${impl.report.slice(0, 200)}`)
+    const done = await implement(fixBrief('completion', [`the slice's "done when" does not hold yet; finish it. Your previous report: ${impl.report}`]), 'Implement', 'complete partial', 'implement')
+    if (done.status === 'PARTIAL') halt('NEEDS_HUMAN', { reason: `implementer could not finish the slice: ${done.report}`, stage: 'implement' })
+  }
+
+  // ---------- Review ----------
+  phase('Review')
+  const review = await reviewLoop(null, 'review')
+
+  // ---------- Verify, then the size gate ----------
+  phase('Verify')
+  const verified = await verifyLoop('verify', 'Verify')
+  if (verified.changedLines > maxLines) {
+    halt('NEEDS_HUMAN', { reason: `slice changes ${verified.changedLines} lines excluding tests and generated code (limit ${maxLines}): split it so a human can review it`, stage: 'size' })
+  }
+
+  // ---------- Gates: security + smoke in parallel, each with bounded fix rounds ----------
+  // Both gates re-run after any gate fix: a fix for one can break the other.
+  phase('Gates')
+  let security = SECURITY_OFF
+  let smoke = SMOKE_OFF
+  for (let round = 0; ; round++) {
+    const [sec, smk] = await parallel([
+      () => (a.security === false ? Promise.resolve(SECURITY_OFF)
+        : agent(securityBrief(), { agentType: 'security-reviewer', schema: SECURITY, phase: 'Gates', label: `security r${round + 1}` })),
+      () => (a.smoke === false ? Promise.resolve(SMOKE_OFF)
+        : agent(smokeBrief(), { agentType: 'smoke-tester', schema: SMOKE, phase: 'Gates', label: `smoke r${round + 1}` })),
+    ])
+    security = sec || { verdict: 'BLOCK', blocking: [], should: [], report: 'security-reviewer returned nothing' }
+    smoke = smk || { result: 'FAIL', report: 'smoke-tester returned nothing' }
+    note('security', security.report)
+    note('smoke', smoke.report)
+    if (security.verdict === 'NEEDS_BRIEF' || smoke.result === 'NEEDS_BRIEF') halt('NEEDS_HUMAN', { reason: 'a gate asked for a better brief', stage: 'gates' })
+    const secBlock = security.verdict === 'BLOCK'
+    const smokeFail = smoke.result === 'FAIL'
+    if (!secBlock && !smokeFail) break
+    if (secBlock) rounds.security++
+    if (smokeFail) rounds.smoke++
+    if (round >= maxRounds) {
+      halt('NEEDS_HUMAN', { reason: `gates still failing after ${maxRounds} fix rounds`, stage: 'gates', open: { security: security.blocking, smoke: smoke.report } })
+    }
+    const items = []
+    if (secBlock) items.push({ security: security.blocking })
+    if (smokeFail) items.push({ smoke: smoke.report, evidence: smoke.evidence || [] })
+    log(`gates: ${secBlock ? 'security BLOCK ' : ''}${smokeFail ? 'smoke FAIL' : ''}`)
+    await implement(fixBrief('gate', items, 'Security findings take the safer fix.'), 'Gates', `fix gates r${round + 1}`, 'fixGates')
+    await verifyLoop('verify after gate fix', 'Gates')
+  }
+  carried.should.push(...(security.should || []))
+
+  // ---------- Final review: no unreviewed commit reaches the PR ----------
+  // Security and smoke are not re-run for fixes made here; those fixes are reviewed and verified.
+  phase('Final review')
+  for (let pass = 0; commits.length > reviewed; pass++) {
+    if (pass >= maxRounds) halt('NEEDS_HUMAN', { reason: `fixes kept arriving after ${maxRounds} final review passes`, stage: 'final-review' })
+    const before = commits.length
+    await reviewLoop(commits.slice(reviewed), 'review fixes')
+    if (commits.length > before) await verifyLoop('verify after review fixes', 'Final review')
+  }
+
+  return result('READY', {
+    verification: 'PASS',
+    changedLines: verified.changedLines,
+    coverage: review.coverage || [],
+    security: security.verdict,
+    smoke: smoke.result,
+    smokeReason: smoke.reason || '',
+    smokeCriteria: smoke.criteria || [],
+    smokeEvidence: smoke.evidence || [],
+  })
+} catch (e) {
+  if (e instanceof Halt) return e.res
+  throw e
+}
