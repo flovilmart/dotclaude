@@ -28,6 +28,7 @@ tasks/
 telemetry/
 todos/
 **/*.local.md
+**/*.local.yaml
 .last-update-result.json
 daemon*
 gh-pr-status-cache*

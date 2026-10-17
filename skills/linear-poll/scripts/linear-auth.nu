@@ -20,7 +20,7 @@ def main [] { print "usage: linear-auth.nu login [--manual] | status | logout" }
 def provider [config: string] {
   let cfg = if $config == "" { load-config } else { load-config $config }
   if not (linear uses-oauth $cfg) {
-    error make { msg: "set linear_oauth_client_id in config.local.md (the client ID of your Linear OAuth application)" }
+    error make { msg: "set linear_oauth_client_id in config.local.yaml (the client ID of your Linear OAuth application)" }
   }
   linear provider $cfg
 }

@@ -6,7 +6,7 @@
 #   linear issues         your open issues in the configured team, by priority
 #   linear logout         revoke the OAuth token and forget it
 #
-# Config: ~/.claude/skills/agent-workflow/config.local.md (team_key, linear_oauth_client_id or
+# Config: ~/.claude/skills/agent-workflow/config.local.yaml (team_key, linear_oauth_client_id or
 # linear_api_key_ref), the same file the watcher reads. Loaded at shell start by autoload.nu.
 
 use ../oauth.nu
@@ -17,7 +17,7 @@ def cfg [config: string] { if $config == "" { load-config } else { load-config $
 
 def oauth-provider [cfg] {
   if not (uses-oauth $cfg) {
-    error make { msg: "set linear_oauth_client_id in config.local.md (the client ID of your Linear OAuth application)" }
+    error make { msg: "set linear_oauth_client_id in config.local.yaml (the client ID of your Linear OAuth application)" }
   }
   provider $cfg
 }

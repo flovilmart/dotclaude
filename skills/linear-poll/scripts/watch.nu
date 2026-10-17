@@ -184,7 +184,7 @@ def main [
   --once                 # one cycle, then exit
   --dry-run              # print actions, execute nothing, save nothing
   --check                # verify the API key and queries, then exit
-  --config: string = ""  # default ~/.claude/skills/agent-workflow/config.local.md
+  --config: string = ""  # default ~/.claude/skills/agent-workflow/config.local.yaml
   --fixtures: string     # offline inputs (selftest)
   --state-dir: string = "~/.claude/agent-workflow"
 ] {

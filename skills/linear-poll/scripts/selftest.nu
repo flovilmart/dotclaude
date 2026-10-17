@@ -201,9 +201,9 @@ def main [] {
     "esac"
   ] | str join "\n" | save $"($bin)/claude"
   ^chmod +x $"($bin)/claude"
-  let wcfg = $"($tmp)/config.local.md"
-  open --raw $"($skill_dir)/../../agent-workflow/config.example.md"
-  | str replace --regex '\| default +\|[^\n]*' $"| default | ($main) |" | save $wcfg
+  let wcfg = $"($tmp)/config.local.yaml"
+  open --raw $"($skill_dir)/../../agent-workflow/config.example.yaml" | from yaml
+  | update repos [{match: "default", repo: $main}] | to yaml | save $wcfg
   {
     issues: [(issue DEMO-1) $waiting]
     comments: {"DEMO-6": [$q {body: "approve", createdAt: "2026-10-02T01:00:00.000Z"}]}

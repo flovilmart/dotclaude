@@ -9,7 +9,7 @@ allowed-tools: [Bash, Read, Write, Edit, Glob, ListAgents, SendMessage, CronCrea
 
 You are the **dispatcher**: the user's main session. Your only jobs here are to configure the workflow, start and stop the poll loop, dispatch coordinators, relay clarifications, and report status. You never implement tickets yourself; each ticket gets its own background coordinator session (`claude --bg --agent ticket-coordinator`) in its own worktree. Keep every turn short so you stay available for whatever else the user asks.
 
-Config lives in `~/.claude/skills/agent-workflow/config.local.md` (template: `config.example.md` next to it). Scripts live in `~/.claude/skills/linear-poll/scripts/`. The poll is `watch.nu`, a nushell watcher that polls Linear and GitHub and dispatches without the model; its events are handled by the `linear-poll` skill.
+Config lives in `~/.claude/skills/agent-workflow/config.local.yaml` (template with every key explained: `config.example.yaml` next to it). `nu ~/.claude/skills/linear-poll/scripts/config.nu check` validates it: unknown keys, wrong types and invalid choices are errors. Scripts live in `~/.claude/skills/linear-poll/scripts/`. The poll is `watch.nu`, a nushell watcher that polls Linear and GitHub and dispatches without the model; its events are handled by the `linear-poll` skill.
 
 Subcommand = `$0`. Ticket id = `$1` when present.
 
@@ -17,7 +17,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
 
 ## `start`
 
-1. **Config.** If `config.local.md` is missing, run the onboarding below and write it. If present, read it and show a two-line summary (team, repos, poll schedule). An older config with `interval: <N>m` instead of `poll_cron` means `*/<N> * * * *`; offer to switch it to the working-hours default.
+1. **Config.** If `config.local.yaml` is missing but an old `config.local.md` exists, convert it with `nu ~/.claude/skills/linear-poll/scripts/config.nu migrate` and show the output. If it is missing altogether, run the onboarding below and write it. Then run `nu ~/.claude/skills/linear-poll/scripts/config.nu check`: any problem it lists is fixed with the user before going on (an old `interval: <N>m` key, flagged as unknown, means `poll_cron: "*/<N> * * * *"`; offer the working-hours default). Show a two-line summary (team, repos, poll schedule).
 2. **Prerequisites.** Run and report, do not fix silently:
    ```
    claude --version            # needs 2.1.290+ (background sessions addressable by name)
@@ -48,7 +48,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
 - **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), coordinator model (`sonnet` recommended), fast model for mechanical stages (`sonnet`), max parallel coordinators, watcher hours (default weekdays 8:00-19:59).
 - **Group 4 — Human gates**: plan approval (`human` recommended), and the coworkers to request once a PR is validated when CODEOWNERS names nobody. Explain the flow in two lines: you validate a draft PR by marking it Ready for review, which requests the coworker; auto-merge only after the coworker approves.
 
-Write the answers into `config.local.md` using the template's structure; cache `team_id` from `list_teams`.
+Write the answers into `config.local.yaml` with the template's keys, order and comments (copy `config.example.yaml` and edit it), cache `team_id` from `list_teams`, then run `config.nu check`.
 
 ---
 

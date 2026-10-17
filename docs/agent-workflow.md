@@ -46,7 +46,7 @@ at any time and talk to it; it answers from its state file and resumes.
 
 | Path | Role |
 |------|------|
-| `skills/agent-workflow/` | Control plane in the main session: `start`, `status`, `stop`, `dispatch <id>`, `clarify <id>`. Holds `config.example.md`; your copy is `config.local.md` (gitignored). |
+| `skills/agent-workflow/` | Control plane in the main session: `start`, `status`, `stop`, `dispatch <id>`, `clarify <id>`. Holds `config.example.yaml` (every key, commented); your copy is `config.local.yaml` (gitignored), validated by `skills/linear-poll/scripts/config.nu check`; `config.nu migrate` converts an old `config.local.md`. |
 | `skills/linear-poll/` | Handles the watcher's events in the dispatcher: relay to a coordinator, early spec gate, tell you. |
 | `skills/linear-poll/scripts/watch.nu` | The poll, in nushell: Linear (GraphQL, key via `op read`), sessions and PRs every minute in working hours; acts through `dispatch.nu` / `resume.nu`; writes `send` / `spec-gate` / `tell` / `info` lines to stdout and `events.log`. Runs on its own in a tmux window (default) or once per cron tick (`--once`). `--check` tests the key and queries; `--dry-run` shows what it would do. |
 | `skills/linear-poll/scripts/follow.nu` | Under the Monitor tool: delivers each new line of `events.log` to the dispatcher exactly once (a cursor survives re-arms), and says when the watcher has stopped. |
@@ -90,7 +90,7 @@ loads `AGENTS.md` automatically only when the repo has no `CLAUDE.md`; a `CLAUDE
    session makes every event expensive. Talk to it only for workflow commands.
 2. `/agent-workflow start`. First run asks a few questions (team, state names, repo paths,
    coordinator permission mode and model, poll schedule). Only issues assigned to you are ever polled and writes
-   `~/.claude/skills/agent-workflow/config.local.md`. It then creates the poll cron.
+   `~/.claude/skills/agent-workflow/config.local.yaml`. It then creates the poll cron.
 3. Optional but recommended: `gh extension install github/gh-stack` for native stacks.
 4. First dispatch into a brand-new worktree directory may need the workspace trust dialog. The
    dispatcher then opens a tmux window with the coordinator running interactively; accept once, press

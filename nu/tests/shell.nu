@@ -6,27 +6,28 @@ use ../shell/linear.nu
 const HERE = path self .
 
 def config-with [extra: string] {
-  let f = (mktemp --suffix .md | str trim)
-  $"- team_key: DEMO\n($extra)\n| match | repo |\n|---|---|\n| default | ~/src/x |\n" | save --force $f
+  let f = (mktemp --suffix .yaml | str trim)
+  $"team_key: DEMO\n($extra)\nrepos:\n  - match: default\n    repo: ~/src/x\n" | save --force $f
   $f
 }
 
 @test
 def "linear status reports an API key setup without reading the key" [] {
-  let s = (with-env {LINEAR_API_KEY: ""} { linear status --config (config-with "- linear_api_key_ref: op://Private/Linear/credential") })
+  let s = (with-env {LINEAR_API_KEY: ""} { linear status --config (config-with "linear_api_key_ref: op://Private/Linear/credential") })
   assert equal $s {method: "api-key", source: "op://Private/Linear/credential"}
 }
 
+# The sign-in state itself is the machine's (Keychain or token file), so it's only checked for its type
 @test
-def "linear status reports an OAuth setup that is not signed in yet" [] {
-  let home = (mktemp -d | str trim)
-  let s = (with-env {HOME: $home} { linear status --config (config-with "- linear_oauth_client_id: client-1") })
-  assert equal ($s | select method provider signed_in) {method: "oauth", provider: "linear", signed_in: false}
+def "linear status reports an OAuth setup and whether it is signed in" [] {
+  let s = (linear status --config (config-with "linear_oauth_client_id: client-1"))
+  assert equal ($s | select method provider) {method: "oauth", provider: "linear"}
+  assert equal ($s.signed_in | describe) "bool"
 }
 
 @test
 def "linear login without an OAuth client says what to configure" [] {
-  assert error {|| linear login --config (config-with "- linear_api_key_ref: op://x/y/z") }
+  assert error {|| linear login --config (config-with "linear_api_key_ref: op://x/y/z") }
 }
 
 @test

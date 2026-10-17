@@ -5,7 +5,7 @@ use ../config.nu *
 use ../rules.nu *
 
 const HERE = path self .
-def cfg [] { parse-config (open --raw ($HERE | path join ../../../agent-workflow/config.example.md)) }
+def cfg [] { load-config ($HERE | path join ../../../agent-workflow/config.example.yaml) }
 def now [] { "2026-10-17T12:00:00Z" | into datetime }
 
 # An issue as linear.nu returns it, with overrides

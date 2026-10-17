@@ -1,8 +1,5 @@
-# Agent Workflow — Local Config
-
-Copy this file to `~/.claude/skills/agent-workflow/config.local.md` (gitignored) or run
-`/agent-workflow start` and answer the onboarding questions. Every key is read by the
-`linear-poll`, `ticket-workflow` and `agent-workflow` skills; scripts receive values as arguments.
+# Fixture: the config.local.md format before config.local.yaml (the example as it was),
+# used by tests/config.nu to check reading an unmigrated config and `config.nu migrate`.
 
 ## Linear
 - team_key: DEMO

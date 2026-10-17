@@ -40,7 +40,7 @@ export def auth [cfg] {
     $"Bearer (oauth token (provider $cfg))"
   } else {
     if ($cfg.linear_api_key_ref? | default "") == "" and ($env.LINEAR_API_KEY? | default "") == "" {
-      error make { msg: "set linear_oauth_client_id (OAuth) or linear_api_key_ref (API key) in config.local.md" }
+      error make { msg: "set linear_oauth_client_id (OAuth) or linear_api_key_ref (API key) in config.local.yaml" }
     }
     api-key ($cfg.linear_api_key_ref? | default "")
   }

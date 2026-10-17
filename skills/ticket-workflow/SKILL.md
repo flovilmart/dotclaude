@@ -11,7 +11,7 @@ Ticket = `$0`. Dispatcher session = `$1` (may be empty; then `ListAgents` finds 
 
 You are the coordinator (see the `ticket-coordinator` agent for your contract). Every phase below that says **delegate** is a subagent launched with `run_in_background: true`; you then end your turn with a one-line status and continue when its completion notification arrives. Read the state file first if it exists: `~/.claude/agent-workflow/state/<ticket>.md`; resume from the recorded phase instead of restarting.
 
-Config: `~/.claude/skills/agent-workflow/config.local.md` (state names, labels, marker, branch pattern, stack tool, human gates). Every Linear comment you write starts with `<comment_marker> · <ticket> · <phase>`.
+Config: `~/.claude/skills/agent-workflow/config.local.yaml` (state names, labels, marker, branch pattern, stack tool, human gates). Every Linear comment you write starts with `<comment_marker> · <ticket> · <phase>`.
 
 ## Human gates
 
