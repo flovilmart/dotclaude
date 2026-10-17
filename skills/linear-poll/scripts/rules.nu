@@ -49,7 +49,9 @@ def stale-candidate [cfg, issue, sessions: list] {
     and not (has-label $issue $cfg.needs_spec_label?)
     and not (has-label $issue $cfg.needs_plan_label?)
     and not (has-label $issue $cfg.stalled_label?)
-    and (session-of $sessions $issue.identifier) == null)
+    and (session-of $sessions $issue.identifier) == null
+    # A sub-issue is worked by its parent's coordinator; redispatching it forks the stack.
+    and ($issue.parent? == null or (session-of $sessions $issue.parent) == null))
 }
 
 def gate-candidate [cfg, issue, state] {

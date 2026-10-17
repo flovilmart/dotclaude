@@ -120,6 +120,14 @@ def "a dead coordinator is redispatched by Linear comment count then stalls" [] 
 }
 
 @test
+def "an in-progress sub-issue of a live coordinator is not redispatched" [] {
+  let slice = (issue DEMO-14 {state: "In Progress", parent: "DEMO-9", comments: []})
+  assert equal (comment-targets (cfg) [$slice] (live DEMO-9) {}) []
+  assert equal (decide (cfg) (now) [$slice] (live DEMO-9) [] {} | get actions) []
+  assert equal (decide (cfg) (now) [$slice] [] [] {} | get actions | types $in) ["redispatch DEMO-14"]
+}
+
+@test
 def "the early spec gate runs at most two per cycle and each ticket once" [] {
   let gcfg = ((cfg) | upsert pre_spec_next_cycle true)
   let next = {|id| issue $id {cycle: {isActive: false, isNext: true}, comments: []} }
