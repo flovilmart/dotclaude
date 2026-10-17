@@ -1,13 +1,50 @@
 # linear.nu — the few Linear GraphQL calls watch.nu needs.
 #
 #   use linear.nu
-#   let key = (linear api-key $cfg.linear_api_key_ref)   # op read, or $env.LINEAR_API_KEY
-#   linear my-issues $key $cfg.team_key
+#   let auth = (linear auth $cfg)        # the Authorization header value
+#   linear my-issues $auth $cfg.team_key
 #
-# A personal API key goes in the Authorization header as is (no "Bearer").
+# Two ways to authenticate:
+#   - OAuth (linear_oauth_client_id set): authorization code + PKCE through ~/.claude/nu/oauth.nu.
+#     Sign in once with linear-auth.nu login; access tokens last 24h and refresh themselves.
+#     The header is "Bearer <token>".
+#   - a personal API key (linear_api_key_ref, read with `op read`, or $env.LINEAR_API_KEY),
+#     sent as is, without "Bearer".
 # Limits: 2,500 requests/hour per API key; watch.nu makes 1-2 per cycle.
 
+use ../../../nu/oauth.nu
+
 const API = "https://api.linear.app/graphql"
+
+export def uses-oauth [cfg] { ($cfg.linear_oauth_client_id? | default "") != "" }
+
+# Linear as an oauth.nu provider: a public client (PKCE, no secret) acting as the user
+export def provider [cfg] {
+  {
+    name: "linear"
+    authorize_url: "https://linear.app/oauth/authorize"
+    token_url: "https://api.linear.app/oauth/token"
+    revoke_url: "https://api.linear.app/oauth/revoke"
+    client_id: $cfg.linear_oauth_client_id
+    scopes: [read write]
+    scope_sep: ","
+    port: ($cfg.linear_oauth_port? | default 8765)
+    host: ($cfg.linear_oauth_host? | default "127.0.0.1")
+    extra: {actor: "user"}
+  }
+}
+
+# The Authorization header value for the configured method
+export def auth [cfg] {
+  if (uses-oauth $cfg) {
+    $"Bearer (oauth token (provider $cfg))"
+  } else {
+    if ($cfg.linear_api_key_ref? | default "") == "" and ($env.LINEAR_API_KEY? | default "") == "" {
+      error make { msg: "set linear_oauth_client_id (OAuth) or linear_api_key_ref (API key) in config.local.md" }
+    }
+    api-key ($cfg.linear_api_key_ref? | default "")
+  }
+}
 
 export def api-key [ref: string] {
   if ($env.LINEAR_API_KEY? | default "") != "" { return $env.LINEAR_API_KEY }
@@ -18,9 +55,9 @@ export def api-key [ref: string] {
   $r.stdout | str trim
 }
 
-export def gql [key: string, query: string, variables: record = {}] {
+export def gql [auth: string, query: string, variables: record = {}] {
   let resp = (
-    http post --full --allow-errors --content-type application/json --headers [Authorization $key]
+    http post --full --allow-errors --content-type application/json --headers [Authorization $auth]
       $API ({query: $query, variables: $variables} | to json)
   )
   let errors = ($resp.body.errors? | default [])
@@ -52,7 +89,7 @@ def normalize-issue [n] {
 }
 
 # My open issues (not completed or canceled) in the team, as the rules expect them
-export def my-issues [key: string, team_key: string] {
+export def my-issues [auth: string, team_key: string] {
   let q = '
     query($team: String!) {
       viewer {
@@ -71,11 +108,11 @@ export def my-issues [key: string, team_key: string] {
         }
       }
     }'
-  gql $key $q {team: $team_key} | get viewer.assignedIssues.nodes | each {|n| normalize-issue $n }
+  gql $auth $q {team: $team_key} | get viewer.assignedIssues.nodes | each {|n| normalize-issue $n }
 }
 
 # {identifier: [{body createdAt}]} for the given issue ids (uuids)
-export def comments-for [key: string, ids: list] {
+export def comments-for [auth: string, ids: list] {
   if ($ids | is-empty) { return {} }
   let q = '
     query($ids: [ID!]) {
@@ -83,30 +120,30 @@ export def comments-for [key: string, ids: list] {
         nodes { identifier comments(first: 100) { nodes { body createdAt } } }
       }
     }'
-  gql $key $q {ids: $ids} | get issues.nodes
+  gql $auth $q {ids: $ids} | get issues.nodes
   | reduce --fold {} {|n, acc| $acc | upsert $n.identifier $n.comments.nodes }
 }
 
-export def comment [key: string, issue_id: string, body: string] {
+export def comment [auth: string, issue_id: string, body: string] {
   let q = 'mutation($input: CommentCreateInput!) { commentCreate(input: $input) { success } }'
-  gql $key $q {input: {issueId: $issue_id, body: $body}} | ignore
+  gql $auth $q {input: {issueId: $issue_id, body: $body}} | ignore
 }
 
-export def add-label [key: string, issue_id: string, team_key: string, name: string] {
+export def add-label [auth: string, issue_id: string, team_key: string, name: string] {
   let find = '
     query($team: String!, $name: String!) {
       issueLabels(first: 1, filter: { name: { eq: $name }, or: [{ team: { key: { eq: $team } } }, { team: { null: true } }] }) {
         nodes { id }
       }
     }'
-  let label = (gql $key $find {team: $team_key, name: $name} | get issueLabels.nodes | get 0?)
+  let label = (gql $auth $find {team: $team_key, name: $name} | get issueLabels.nodes | get 0?)
   if $label == null {
     error make { msg: $"Linear label '($name)' not found in team ($team_key) or workspace" }
   }
   let q = 'mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }'
-  gql $key $q {id: $issue_id, input: {addedLabelIds: [$label.id]}} | ignore
+  gql $auth $q {id: $issue_id, input: {addedLabelIds: [$label.id]}} | ignore
 }
 
-export def whoami [key: string] {
-  gql $key 'query { viewer { name email } }' {} | get viewer
+export def whoami [auth: string] {
+  gql $auth 'query { viewer { name email } }' {} | get viewer
 }

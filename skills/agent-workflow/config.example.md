@@ -37,7 +37,10 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 
 ## Poll
 The watcher (skills/linear-poll/scripts/watch.nu) polls Linear and GitHub in nushell and wakes the dispatcher only when it's needed.
-- linear_api_key_ref: op://Private/Linear/credential   # 1Password reference to a Linear personal API key; watch.nu reads it with `op read` at start. Never the key itself
+- linear_oauth_client_id:        # recommended: client ID of your Linear OAuth app (Settings → API → OAuth applications; redirect http://127.0.0.1:8765/callback). Sign in once: nu ~/.claude/skills/linear-poll/scripts/linear-auth.nu login
+- linear_oauth_port: 8765         # loopback port of the registered redirect URI
+# linear_oauth_host: localhost    # only if Linear refuses http://127.0.0.1:<port>/callback: register http://localhost:<port>/callback instead
+- linear_api_key_ref: op://Private/Linear/credential   # instead of OAuth: 1Password reference to a Linear personal API key, read with `op read` at start. Never the key itself
 - watch: monitor                 # monitor (watch.nu streams events to the dispatcher; quiet cycles cost no tokens) | cron (poll_cron runs one watch.nu cycle per tick)
 - watch_interval: 60             # seconds between Linear checks; PRs every second check
 - watch_hours: 8-19              # local hours the watcher acts (8:00-19:59)

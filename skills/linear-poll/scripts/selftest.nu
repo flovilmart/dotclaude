@@ -23,6 +23,7 @@ def nu-at-least [min: list<int>] {
 
 use config.nu *
 use rules.nu *
+use linear.nu
 
 def assert-eq [actual, expected, label: string] {
   if $actual == $expected {
@@ -178,6 +179,9 @@ def main [] {
   assert-eq (resolve-repo $cfg.repos "Demo App" []) ("~/src/flovilmart/demo-app" | path expand) "repo by project"
   assert-eq (resolve-repo $cfg.repos null [infra]) ("~/src/flovilmart/infra" | path expand) "repo by label"
   assert-eq (resolve-repo $cfg.repos "Other" []) ("~/src/flovilmart/dotclaude" | path expand) "default repo"
+  let ocfg = ($cfg | upsert linear_oauth_client_id "client-1")
+  assert-eq (linear uses-oauth $cfg) false "API key auth when no OAuth client is configured"
+  assert-eq (linear provider $ocfg | select client_id scope_sep port extra) {client_id: "client-1", scope_sep: ",", port: 8765, extra: {actor: "user"}} "Linear OAuth provider: public client on the loopback port, acting as the user"
 
   print "rules.nu"
   let now = ("2026-10-17T12:00:00Z" | into datetime)
@@ -280,6 +284,12 @@ def main [] {
   assert-eq (do $deliver) [] "--reset skips old history"
 
   ^rm -rf $tmp
+
+  print "nu/ shared modules (run-tests.nu)"
+  let nu_tests = (^nu ($skill_dir | path join ../../../nu/run-tests.nu | path expand) | complete)
+  let nu_summary = ($nu_tests.stdout | lines | where {|l| $l =~ '^nu tests:' } | str join)
+  if $nu_tests.exit_code != 0 { print ($nu_tests.stdout | lines | where {|l| $l =~ 'FAIL' } | str join "\n") }
+  assert-eq $nu_tests.exit_code 0 $"oauth.nu: PKCE, loopback callback, refresh rotation, token store \(($nu_summary | str replace 'nu tests: ' '')\)"
 
   print "workflows (node --test)"
   let tests = ($skill_dir | path join ../../../workflows/test | path expand)
