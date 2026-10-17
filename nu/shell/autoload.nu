@@ -7,3 +7,4 @@
 # Paths are ~/.claude/..., so they don't depend on where this file is linked from.
 
 use ~/.claude/nu/shell/linear.nu
+use ~/.claude/nu/shell/inbox.nu
