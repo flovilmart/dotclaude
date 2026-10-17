@@ -45,6 +45,7 @@ const SLICE = {
     steps: { type: 'array', items: { type: 'string' } },
     risks: { type: 'array', items: { type: 'string' } },
     smoke: { type: 'boolean', description: 'true when the slice has user-visible, API, CLI or integration behaviour worth a smoke test' },
+    security: { type: 'boolean', description: 'true when the slice adds or changes dependencies, auth or permissions, an input boundary (HTTP, CLI, file, queue), secrets or crypto, persistence of user data, infra or IAM' },
   },
   required: ['n', 'slug', 'goal', 'priority', 'dependsOn', 'doneWhen', 'guardrails', 'steps'],
 }
@@ -91,7 +92,7 @@ ${asText(a.profile)}`
 const planBrief = () => `TASK: design the stack of subtasks (slices) for ${a.ticket}.
 GOAL: the spec's goal reached through small, independently reviewable and revertable slices, each shippable on its own.
 GUARDRAILS: the spec's Guardrails and the repo's AGENTS.md; under ~400 changed lines per slice excluding tests and generated code (flag above ~800); at most 5 slices, else propose splitting the ticket; one behaviour end to end per slice, never one slice per layer; walking skeleton first; feature flag per the repo's mechanism when behaviour is user-visible and spans slices or carries rollout risk; tests named before code; no speculative generality; honest dependencies; a priority per slice.
-DONE WHEN: you return the STACK PLAN as structured output (slices with slug, goal, priority, dependsOn, doneWhen, guardrails, testsFirst, steps, smoke) plus the markdown report.
+DONE WHEN: you return the STACK PLAN as structured output (slices with slug, goal, priority, dependsOn, doneWhen, guardrails, testsFirst, steps, smoke, security) plus the markdown report.
 ${context()}`
 
 const reviseBrief = (plan, review) => `TASK: revise this plan to address the blocking findings; keep everything that was not challenged.

@@ -29,13 +29,14 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 
 ## Coordinators
 - permission_mode: auto          # auto | acceptEdits | default — mode of each background coordinator session
-- model:                         # empty = your default model; or an alias such as sonnet
+- model: sonnet                  # coordinator model: it routes and judges results while workers do the deep work; empty = your default model
+- fast_model: sonnet             # workers' mechanical stages (verify, smoke, formatter fixes); judgement stages inherit your default model
 - max_parallel: 3                # never run more coordinators than this at once
 - max_redispatch: 3              # automatic restarts of a coordinator that died mid-ticket before the ticket is labelled stalled
 - dispatcher_name: dispatcher    # name of the main session (start it with `claude --name dispatcher`, or /rename)
 
 ## Poll
-- interval: 10m                  # passed to the cron created by /agent-workflow start
+- poll_cron: "*/15 8-19 * * 1-5"  # when the poll runs (local time): every 15 min, 8:00-19:59, Mon-Fri. Each tick re-sends the dispatcher's context, so keep it sparse
 - pre_spec_next_cycle: false     # also run the spec gate (questions only, no worktree) on my Todo issues in the NEXT cycle
 
 ## Human gates
@@ -49,8 +50,9 @@ Two people see every change: you validate the feature and review it for mistakes
 - max_slice_lines: 800           # changed lines per slice (excluding tests and generated code) above which the subtask stops and asks to split
 - merge_method: squash           # squash | merge | rebase, unless the repo's AGENTS.md says otherwise
 - smoke_test: auto               # auto (slices the planner marks smoke-worthy) | always | never
+- verify_scope: affected         # affected (packages changed since the base; CI runs the full suite on the PR) | full
 - max_fix_rounds: 3              # fix rounds per gate (review, verify, security, smoke) inside the subtask workflow before a human is asked
-- security_review: always        # always | never — gate before a PR leaves draft
+- security_review: auto          # auto (slices the planner flags: deps, auth, inputs, secrets, user data, infra) | always | never
 
 ## Conventions (defaults the coordinator uses when a repo's AGENTS.md is silent)
 - stack_tool: auto               # auto (gh stack if installed) | gh-stack | manual

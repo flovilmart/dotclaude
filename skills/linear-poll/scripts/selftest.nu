@@ -3,7 +3,7 @@
 #
 # Builds a throwaway repo with a local "origin", then exercises
 # ensure-worktree.nu (create, reuse, free-after-merge, worktree path as input,
-# .worktreeinclude copy, ticket holds) and pr-sweep.nu's branch → ticket parsing,
+# .worktreeinclude copy, ticket holds), profile-key.nu and pr-sweep.nu's branch → ticket parsing,
 # then runs the saved workflows' regression tests (workflows/test) when node is installed.
 # No network, no Linear, no claude. Prints ok/FAIL per check; exit code 1 on failure.
 #
@@ -122,6 +122,26 @@ def main [] {
   ^rm -f (^git -C $held rev-parse --absolute-git-dir | str trim | path join agent-ticket)
   let released = (^nu $ensure $main feat/demo-10 | str trim)
   assert-eq $released $held "a released worktree is free again"
+
+  print "profile-key.nu"
+  let pkey = $"($skill_dir)/profile-key.nu"
+  let cache = $"($tmp)/profiles"
+  let k1 = (^nu $pkey $main --dir $cache | from json)
+  assert-eq $k1.fresh false "no cached profile yet"
+  mkdir $cache
+  $"<!-- profile-key: ($k1.key) -->\nREPO PROFILE" | save $k1.path
+  assert-eq (^nu $pkey $main --dir $cache | from json | get fresh) true "cached profile with the current key is fresh"
+  assert-eq (^nu $pkey $held --dir $cache | from json | get key) $k1.key "same key from a worktree path"
+  git-commit $main "unrelated commit"
+  ^git -C $main push --quiet origin main
+  assert-eq (^nu $pkey $main --dir $cache | from json | get fresh) true "an unrelated commit keeps the profile fresh"
+  "# rules" | save $"($main)/AGENTS.md"
+  ^git -C $main add AGENTS.md
+  git-commit $main "add AGENTS.md"
+  ^git -C $main push --quiet origin main
+  let k2 = (^nu $pkey $main --dir $cache | from json)
+  assert-eq ($k2.key != $k1.key) true "changing AGENTS.md on the default branch changes the key"
+  assert-eq $k2.fresh false "and makes the cached profile stale"
 
   print "pr-sweep.nu"
   assert-eq (^nu $sweep --parse-branch "florent/eng-123-add-thing-s2-schema" | str trim) "ENG-123" "ticket parsed from Linear-style branch"

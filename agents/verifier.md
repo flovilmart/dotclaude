@@ -23,12 +23,12 @@ If you notice the task drifting from the goal, or a guardrail blocking the task,
 ## Procedure
 
 1. Take the commands from the repo profile. If the profile is missing something, look in `AGENTS.md`, `CLAUDE.md`, `package.json` scripts, `Makefile`, and CI workflow files, and say which you used.
-2. Run in this order, each from the worktree root, scoped to the affected packages when the repo supports scoping and a full run would be slow:
+2. Use the scope the brief gives. **Affected** (the default): only packages changed since the base, with the profile's `Affected checks` (e.g. `pnpm --filter "...[<base>]"`, `turbo run <task> --filter=...[<base>]`, `nx affected -t <task> --base=<base>`); CI runs the full suite on the PR. **Full**: the full suite as CI runs it. Run in this order, each from the worktree root:
    - formatter in check mode (you may run it in write mode and report if it changed files; those changes must be committed by the implementer)
    - lint
    - typecheck
-   - unit and integration tests for the affected packages, then the full suite if the repo's docs or CI require it for every PR
-   - build, only if CI runs it and it finishes in a few minutes
+   - unit and integration tests in scope
+   - build in scope, only if CI runs it and it finishes in a few minutes
 3. Capture the first failing output verbatim (trimmed to the relevant lines). Do not paraphrase errors.
 4. Re-run a failing test once to detect flakiness; report both results.
 5. Confirm the tree is clean afterwards (`git status --porcelain`) and that nothing you ran modified tracked files, except formatter output you reported.

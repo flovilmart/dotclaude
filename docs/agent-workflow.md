@@ -20,7 +20,7 @@ of just the affected criteria. `/agent-workflow status` lists everything **waiti
 
 ```
  you ──▶ main session ("dispatcher")              one process, always free
-            │  /loop 10m /linear-poll             cron fires between your turns
+            │  /linear-poll on poll_cron           weekdays every 15 min; dedicated session
             │
             ├─▶ claude --bg --name ENG-123 --agent ticket-coordinator   (worktree monorepo-wt2)
             │        │ /ticket-workflow ENG-123 dispatcher
@@ -60,6 +60,7 @@ at any time and talk to it; it answers from its state file and resumes.
 | `agents/verifier.md` | Runs the repo's real quality gates and reports verbatim. |
 | `agents/security-reviewer.md` | Dependency audit, secret scan, diff review for authz/injection/exposure; blocks a PR leaving draft. |
 | `agents/smoke-tester.md` | Starts the app the repo's way and exercises the slice's acceptance criteria, flag off and on, with evidence. |
+| `skills/linear-poll/scripts/profile-key.nu` | Whether the cached repo profile (`~/.claude/agent-workflow/profiles/<repo>.md`) is still valid: a key over the agent docs, manifests and CI config on the default branch. A fresh profile skips repo-scout. |
 | `skills/linear-poll/scripts/pr-sweep.nu` | Open and recently merged PRs by ticket with CI, review and auto-merge state; feeds PR events to coordinators. |
 | `skills/linear-poll/scripts/selftest.nu` | Offline test of the worktree allocator (including ticket holds) and branch parsing (temp repo, no network), plus the workflow tests when node is installed. |
 | `hooks/agent-log.sh` + `skills/agent-workflow/scripts/report.nu` | One JSON line per subagent start/stop and session end; `/agent-workflow report` turns it into per-ticket, per-agent run counts and minutes. |
@@ -71,12 +72,14 @@ loads `AGENTS.md` automatically only when the repo has no `CLAUDE.md`; a `CLAUDE
 
 ## Setup
 
-1. Start your main session with a stable name, from any directory:
+1. Start a **dedicated** dispatcher session with a stable name, in its own tmux window, from any directory:
    ```nu
    claude --name dispatcher
    ```
+   Don't do other work in it: every poll tick re-sends the whole conversation, so a long working
+   session makes every tick expensive. Talk to it only for workflow commands.
 2. `/agent-workflow start`. First run asks a few questions (team, state names, repo paths,
-   coordinator permission mode, poll interval). Only issues assigned to you are ever polled and writes
+   coordinator permission mode and model, poll schedule). Only issues assigned to you are ever polled and writes
    `~/.claude/skills/agent-workflow/config.local.md`. It then creates the poll cron.
 3. Optional but recommended: `gh extension install github/gh-stack` for native stacks.
 4. First dispatch into a brand-new worktree directory may need the workspace trust dialog. The
@@ -149,6 +152,7 @@ claude logs ENG-123                 # recent output
 /agent-workflow try ENG-123 s2      # the coordinator runs the slice's app with the flag on for you to click through
 /agent-workflow dispatch ENG-130    # push one ticket through regardless of cycle or state
 /agent-workflow stop                # remove the poll cron (coordinators keep running)
+/usage                              # in the dispatcher: Loops shows what the poll costs
 ```
 
 A coordinator that is idle and unattached for about an hour is stopped by the supervisor; its
@@ -168,6 +172,23 @@ conversation is kept, and the next poll tick (or `claude attach`) restarts it wh
   sub-issues in Linear at any time; nothing has to be finished in one go. Subtasks that depend on an
   unmerged subtask are stacked; independent ones branch from the default branch as standalone PRs.
 - Across tickets, the poll loop dispatches by Linear priority within `max_parallel`.
+
+## Cost and speed
+
+Where the tokens and the minutes go, and what keeps them down:
+
+- **Poll ticks** re-send the dispatcher's context: keep that session dedicated and small, and the
+  schedule sparse (`poll_cron`, weekdays every 15 min by default). `/usage` → Loops shows what the
+  poll costs. Recurring crons expire after 7 days; `/agent-workflow status` warns when it's gone.
+- **Models by stage**: the coordinator and the mechanical stages (verify, smoke, formatter fixes) run on
+  `sonnet` at low effort (`model`, `fast_model`); judgement stages (spec, plan, design challenge,
+  implement, code review, fixes for failing checks, security) inherit your default model.
+- **Verification is scoped** to the packages changed since the base (`verify_scope: affected`); CI runs
+  the full suite on the PR, and failures come back through the poll.
+- **Fix rounds carry blocking findings only**; SHOULD and NIT go to your validation packet.
+- **Gates where they matter**: the planner flags slices for smoke and security; the second
+  `/security-review` pass runs only on request.
+- **Repo profiles are cached** per repo until agent docs, manifests or CI config change.
 
 ## Design choices and limits
 

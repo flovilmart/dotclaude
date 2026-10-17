@@ -63,11 +63,11 @@ Two steps are deterministic and run as **saved workflows** instead of hand-dispa
    ## Log
    - <timestamp> claimed
    ```
-6. Delegate **repo-scout** (prompt: worktree path, ticket title, the area the ticket points at). Stop turn.
+6. **Repo profile, cached per repo.** Run `nu ~/.claude/skills/linear-poll/scripts/profile-key.nu <worktree>`; it prints `{repo, key, path, fresh}`. `fresh: true` → read the profile from `path` (skip the first line) and go to Phase 1 without delegating. Otherwise delegate **repo-scout** (prompt: worktree path) and stop turn.
 
 ## Phase 1 — Repo profile
 
-On repo-scout's report: store the full report in the state file under "Repo profile". If it lists a setup command, run it now (install deps in the fresh worktree) and confirm the fast checks run. Then go to Phase 2.
+With the profile (from the cache, or from repo-scout's report, which you first write to the cache `path` with the first line `<!-- profile-key: <key> -->` so later tickets on this repo skip repo-scout until its agent docs, manifests or CI config change on the default branch): store it in the state file under "Repo profile". If it lists a setup command, run it now (install deps in the fresh worktree) and confirm the fast checks run. Then go to Phase 2.
 
 ## Phase 2 — Spec gate
 
@@ -116,8 +116,8 @@ Subtasks are not a fixed sequence. Each pick is a fresh decision, and you may st
 Workflow({ scriptPath: "<home>/.claude/workflows/subtask.js",
            args: { ticket, branch, base: <previous subtask branch or default branch>, worktree,
                    slice: <slice details from the plan / sub-issue>, spec, profile, flag,
-                   security: <security_review == always>, smoke: <smoke_test == always, or auto and slice.smoke>,
-                   maxRounds: <max_fix_rounds>, maxLines: <max_slice_lines> } })
+                   security: <security_review == always, or auto and slice.security>, smoke: <smoke_test == always, or auto and slice.smoke>,
+                   maxRounds: <max_fix_rounds>, maxLines: <max_slice_lines>, fastModel: <fast_model>, verifyScope: <verify_scope> } })
 ```
 It runs implementer → code-challenger (fix rounds) → verifier (fix rounds, size gate) → security-reviewer and smoke-tester in parallel (fix rounds) → code-challenger again on any fix made after the first review, every agent with a four-part brief, and returns one result:
 

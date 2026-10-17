@@ -25,7 +25,7 @@ If you notice the task drifting from the goal, or a guardrail blocking the task,
 2. **Dependency audit**, pick what matches the repo profile and only for the changed lockfile/manifest when scoped runs exist: `pnpm audit --audit-level high` / `npm audit --audit-level=high`, `pip-audit` or `uv pip audit`, `cargo audit`, `govulncheck ./...`, `bundle audit`. Report what you ran. New dependencies: check they are the real package (name, publisher, download count, age) and licence-compatible per the repo docs.
 3. **Secret scan** of the diff: `gitleaks protect --staged` or `gitleaks detect --no-git --source .` when installed; otherwise grep the diff for key-like strings (`AKIA`, `-----BEGIN`, `sk_live`, `ghp_`, `xox`, `password=`, long base64) and for `.env`-style files being added.
 4. **Review** the diff against these questions, citing `path:line`: is every new input validated and bounded; are authz checks on the server side and on every new path, including the flag-off path; any string-built SQL/shell/HTML/URL; any user data in logs, errors or telemetry; any new default that is permissive (open CORS, debug on, verify=false, world-readable files); any crypto rolled by hand; any PII or secrets persisted or sent to a third party; any change that widens an IAM, token or scope.
-5. If the `security-review` skill is available in this session, run it on the branch as a second opinion and merge its findings with yours, deduplicated.
+5. Only when the brief asks for a second opinion, and the `security-review` skill is available: run it on the branch and merge its findings with yours, deduplicated.
 
 ## Severity
 

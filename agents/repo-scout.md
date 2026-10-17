@@ -39,6 +39,7 @@ Sources read: <paths>
 
 Setup:        <command to install deps in a fresh worktree, or "none needed">
 Fast checks:  lint: <cmd> | typecheck: <cmd> | unit (scoped): <cmd pattern for one package/file> | format: <cmd>
+Affected checks: <commands scoped to packages changed since a base ref: pnpm --filter "...[<base>]", turbo --filter=...[<base>], nx affected --base=<base>, ...> | "not supported: use Fast checks per changed package"
 Full checks:  <exact commands CI runs, in order>
 Run:          <command to start the app/service locally for a smoke test, readiness signal, required env or services> | "not documented"
 E2E:          <e2e/browser test runner and where specs live (Playwright config, Cypress, ...)> | "none"
@@ -49,10 +50,12 @@ Feature flags:<mechanism, how to add a flag, how to default it off, example path
 Commits/PRs:  <commit message convention, PR title format, PR template path, required checks, review rules>
 Stacking:     <tool present + how to use it per docs> | "none; use manual stacked branches"
 Branching:    <branch naming rule, default branch, protected branches>
-Architecture: <3-6 bullets on where things live, that matter for the ticket's area>
+Architecture: <3-6 bullets on the top-level layout: apps, packages, shared libraries, where tests live>
 Do not touch: <generated files, vendored dirs, areas the docs mark off-limits>
 Quotes:       <verbatim rules from AGENTS.md/CLAUDE.md that constrain implementation>
 Unknowns:     <what you could not determine; say which command to try>
 ```
+
+The profile is cached and reused by every ticket on this repo until its agent docs, manifests or CI config change, so keep it repo-wide: nothing specific to one ticket.
 
 Rules: commands must be copy-pastable from the worktree root; mark anything inferred rather than documented with `(inferred)`; do not invent a convention when the docs are silent, report "not documented".

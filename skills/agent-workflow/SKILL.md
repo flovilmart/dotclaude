@@ -17,7 +17,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
 
 ## `start`
 
-1. **Config.** If `config.local.md` is missing, run the onboarding below and write it. If present, read it and show a two-line summary (team, repos, interval).
+1. **Config.** If `config.local.md` is missing, run the onboarding below and write it. If present, read it and show a two-line summary (team, repos, poll schedule). An older config with `interval: <N>m` instead of `poll_cron` means `*/<N> * * * *`; offer to switch it to the working-hours default.
 2. **Prerequisites.** Run and report, do not fix silently:
    ```
    claude --version            # needs 2.1.290+ (background sessions addressable by name)
@@ -31,15 +31,16 @@ Subcommand = `$0`. Ticket id = `$1` when present.
    nu ~/.claude/skills/linear-poll/scripts/selftest.nu
    ```
    It first checks that `nu` is at least the version the scripts are tested on (`MIN_NU` in `selftest.nu`). A failure here means the poll would misbehave; stop and show the failing check (for an old nu: `brew upgrade nushell`).
-3. **Session name.** Call `ListAgents`; the first line is this session's name. If it differs from `dispatcher_name` in the config, update the config to the real name (coordinators message you by it) and tell the user they can run `/rename <name>` to make it stable.
-4. **Poll loop.** Call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with the configured interval and the prompt `/linear-poll`. Report the cron id. The loop fires between turns, so the user can keep working in this session.
-5. Finish with: the cron id, how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).
+3. **Dedicated session.** Every poll tick re-sends this whole conversation, so the dispatcher must stay small. If this conversation already holds unrelated work, say so and recommend starting a fresh `claude --name dispatcher` in its own tmux window for the workflow, and doing other work elsewhere. Don't block on it.
+4. **Session name.** Call `ListAgents`; the first line is this session's name. If it differs from `dispatcher_name` in the config, update the config to the real name (coordinators message you by it) and tell the user they can run `/rename <name>` to make it stable.
+5. **Poll loop.** Call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with `cron: <poll_cron>` and the prompt `/linear-poll`. Report the cron id and its next run time. Recurring crons expire after 7 days: say so, and that `/agent-workflow start` re-arms it (`status` warns when it's gone).
+6. Finish with: the cron id, how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).
 
 ### Onboarding questions (one group at a time)
 
 - **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; label to use while waiting for clarifications. Tell the user that only issues assigned to them are ever polled.
 - **Group 2 — Repos**: default checkout path, plus optional `project:` / `label:` → path rows. Paths use `~/src/<org>/<repo>`.
-- **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), model override, max parallel coordinators, poll interval.
+- **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), coordinator model (`sonnet` recommended), fast model for mechanical stages (`sonnet`), max parallel coordinators, poll schedule (default weekdays 8:00-19:59 every 15 min).
 - **Group 4 — Human gates**: plan approval (`human` recommended), and the coworkers to request once a PR is validated when CODEOWNERS names nobody. Explain the flow in two lines: you validate a draft PR by marking it Ready for review, which requests the coworker; auto-merge only after the coworker approves.
 
 Write the answers into `config.local.md` using the template's structure; cache `team_id` from `list_teams`.
@@ -62,7 +63,7 @@ Then **Waiting on coworkers**: non-draft PRs with `requested` reviewers and no a
 Then:
 
 - `nu ~/.claude/skills/linear-poll/scripts/sessions.nu` → coordinators (name, state, status, waitingFor). A `waitingFor` of `permission prompt` means the user must `claude attach <ticket>` to answer it.
-- `CronList` → whether the poll loop is armed.
+- `CronList` → whether the poll loop is armed. Not armed (crons expire after 7 days) → say so first and offer `/agent-workflow start`.
 - `nu ~/.claude/skills/linear-poll/scripts/pr-sweep.nu <repo>` per configured repo → open PRs by ticket with `ci` / `review` / `draft` / `autoMerge` columns.
 - `list_issues` with `assignee: "me"` and `label: <needs_spec_label>`, then `label: <needs_plan_label>` → tickets waiting on the human.
 - For each coordinator: the first lines of `~/.claude/agent-workflow/state/<ticket>.md` (phase and slice table), if present.

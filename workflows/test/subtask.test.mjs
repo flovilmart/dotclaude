@@ -54,13 +54,43 @@ test('a PARTIAL implementation is sent back once, then escalated', async () => {
   assert.equal(twice.result.stage, 'implement')
 })
 
-test('should findings sent to the fixer are not carried into the PR body', async () => {
-  const { result } = await run('subtask.js', ARGS, {
+test('the fixer gets blocking findings only; the approving review\'s should findings are carried', async () => {
+  const { result, calls } = await run('subtask.js', ARGS, {
     implementer: [impl(['a1 feat']), impl(['b2 fix'])],
     'code-challenger': [review([finding('B1')], [finding('S1')]), review([], [finding('S2'), finding('S2')])],
   })
   assert.equal(result.status, 'READY')
+  const fix = calls.find((c) => c.label === 'fix review r1').prompt
+  assert.match(fix, /B1/)
+  assert.doesNotMatch(fix, /S1/)
   assert.deepEqual(result.carried.should.map((f) => f.issue), ['S2'])
+})
+
+test('mechanical stages use the fast model, judgement stages inherit', async () => {
+  const { calls } = await run('subtask.js', { ...ARGS, smoke: true }, {
+    implementer: [impl(['a1 feat']), impl(['b2 fmt']), impl(['c3 types'])],
+    verifier: [
+      { result: 'PASS', formatterChanged: ['src/a.ts'], changedLines: 100, report: 'fmt' },
+      { result: 'FAIL', failures: 'TS2345', changedLines: 100, report: 'fail' },
+    ],
+  })
+  const by = (label) => calls.find((c) => c.label === label)
+  assert.equal(by('implement eng-1-s1').model, undefined)
+  assert.equal(by('review r1').model, undefined)
+  assert.equal(by('verify r1').model, 'sonnet')
+  assert.equal(by('verify r1').effort, 'low')
+  assert.equal(by('fix verify r1').model, 'sonnet', 'formatter-only fix')
+  assert.equal(by('fix verify r2').model, undefined, 'failing checks need the judgement model')
+  assert.equal(by('smoke r1').model, 'sonnet')
+  const custom = await run('subtask.js', { ...ARGS, fastModel: 'haiku' })
+  assert.equal(custom.calls.find((c) => c.type === 'verifier').model, 'haiku')
+})
+
+test('verification is scoped to affected packages unless verifyScope is full', async () => {
+  const scoped = await run('subtask.js', ARGS)
+  assert.match(scoped.calls.find((c) => c.type === 'verifier').prompt, /affected since main/)
+  const full = await run('subtask.js', { ...ARGS, verifyScope: 'full' })
+  assert.match(full.calls.find((c) => c.type === 'verifier').prompt, /the full suite/)
 })
 
 test('an oversized slice stops with a request to split it', async () => {

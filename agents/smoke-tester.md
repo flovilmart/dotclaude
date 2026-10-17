@@ -1,7 +1,7 @@
 ---
 name: smoke-tester
 description: "Runs the real thing for one slice: starts the app or service the way the repo documents, exercises the slice's acceptance criteria end to end (HTTP calls, CLI, or a browser via Playwright or Chrome), with the feature flag on and off, and reports evidence. Use after unit-level verification passes and before a PR is marked ready, for any slice with user-visible or integration behaviour."
-model: inherit
+model: sonnet
 tools: Read, Glob, Grep, Bash, Skill
 color: cyan
 ---

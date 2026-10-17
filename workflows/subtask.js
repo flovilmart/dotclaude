@@ -16,6 +16,9 @@
 //   smoke         boolean: run the smoke test (coordinator resolves config smoke_test auto/always/never)
 //   maxRounds     fix rounds per gate before giving up (default 3)
 //   maxLines      changed lines (excluding tests and generated code) above which the slice must be split (default 800)
+//   fastModel     model for mechanical stages: verify, smoke, formatter-only fixes (default 'sonnet');
+//                 judgement stages (implement, review, review and check fixes, security) inherit the session model
+//   verifyScope   'affected' (default: packages changed since base; CI runs the full suite on the PR) | 'full'
 //
 // Every commit that reaches READY has been through an approving code review:
 // fixes made for the verifier or the gates are reviewed again at the end.
@@ -41,6 +44,8 @@ export const meta = {
 const a = args || {}
 const maxRounds = a.maxRounds || 3
 const maxLines = a.maxLines || 800
+const FAST = { model: a.fastModel || 'sonnet', effort: 'low' }
+const fullVerify = a.verifyScope === 'full'
 const asText = (v) => (typeof v === 'string' ? v : JSON.stringify(v, null, 2))
 
 // ---------- schemas (StructuredOutput) ----------
@@ -162,7 +167,9 @@ GUARDRAILS: read-only (you may run scoped tests); judge against the spec, the sl
 DONE WHEN: you return the CODE REVIEW as structured output (verdict APPROVE | REQUEST_CHANGES with blocking / should / nits, and coverage: for each acceptance criterion of the slice, the test that proves it as path:line, or "none").
 ${context()}`
 
-const verifyBrief = () => `TASK: run the repository's full quality gates on branch ${a.branch} exactly as the repo profile and CI define them, and measure the slice size.
+const verifyBrief = () => `TASK: run the repository's quality gates on branch ${a.branch} as the repo profile and CI define them, ${fullVerify
+  ? 'the full suite'
+  : `scoped to the packages affected since ${a.base} (the profile's "Affected checks"; CI runs the full suite on the PR)`}, and measure the slice size.
 GOAL: the PR is green on CI the first time, and small enough for a human to review.
 GUARDRAILS: never edit source; you may run the formatter in write mode and report changed files; re-run a failing test once to detect flakiness; leave the tree as you found it apart from formatter output.
 DONE WHEN: you return the VERIFICATION as structured output (PASS | FAIL with verbatim failures, and changedLines from git diff --numstat ${a.base}...HEAD excluding tests, lockfiles and generated files).
@@ -208,8 +215,8 @@ class Halt { constructor(res) { this.res = res } }
 const halt = (status, extra) => { throw new Halt(result(status, extra)) }
 
 const stops = ['BLOCKED', 'NEEDS_BRIEF', 'MISALIGNED']
-const implement = async (brief, phase, label, key) => {
-  const impl = await agent(brief, { agentType: 'implementer', schema: IMPL, phase, label })
+const implement = async (brief, phase, label, key, opts = {}) => {
+  const impl = await agent(brief, { agentType: 'implementer', schema: IMPL, phase, label, ...opts })
   if (!impl) halt('FAILED', { reason: 'implementer returned nothing', stage: label })
   commits.push(...(impl.commits || []))
   uncertain.push(...(impl.uncertain || []))
@@ -220,7 +227,8 @@ const implement = async (brief, phase, label, key) => {
 }
 
 // Review until code-challenger approves; fix rounds are reviewed by the next round.
-// Only the approving round's should / nits are carried: earlier ones went to the fixer.
+// The fixer gets blocking findings only. SHOULD / NIT go to the owner's packet:
+// the approving round re-reviews the whole scope, so its lists are the current ones.
 const reviewLoop = async (fixes, label) => {
   for (let round = 0; ; round++) {
     const review = await agent(reviewBrief(fixes), { agentType: 'code-challenger', schema: REVIEW, phase: fixes ? 'Final review' : 'Review', label: `${label} r${round + 1}` })
@@ -236,14 +244,14 @@ const reviewLoop = async (fixes, label) => {
     if (round >= maxRounds) halt('NEEDS_HUMAN', { reason: `review still blocking after ${maxRounds} fix rounds`, stage: label, open: review.blocking })
     rounds.review++
     log(`${label} round ${round + 1}: ${review.blocking.length} blocking finding(s)`)
-    await implement(fixBrief('review', { blocking: review.blocking, should: review.should }), fixes ? 'Final review' : 'Review', `fix ${label} r${round + 1}`, 'fixReview')
+    await implement(fixBrief('review', { blocking: review.blocking }), fixes ? 'Final review' : 'Review', `fix ${label} r${round + 1}`, 'fixReview')
   }
 }
 
 // Verify until green with no formatter changes; failures go back to the implementer.
 const verifyLoop = async (label, phase) => {
   for (let round = 0; ; round++) {
-    const verify = await agent(verifyBrief(), { agentType: 'verifier', schema: VERIFY, phase, label: `${label} r${round + 1}` })
+    const verify = await agent(verifyBrief(), { agentType: 'verifier', schema: VERIFY, phase, label: `${label} r${round + 1}`, ...FAST })
     if (!verify) halt('FAILED', { reason: 'verifier returned nothing', stage: label })
     note('verify', verify.report)
     if (verify.result === 'NEEDS_BRIEF') halt('NEEDS_HUMAN', { reason: verify.report, stage: label })
@@ -251,11 +259,13 @@ const verifyLoop = async (label, phase) => {
     if (verify.result === 'PASS' && formatter.length === 0) return verify
     if (round >= maxRounds) halt('NEEDS_HUMAN', { reason: `checks still failing after ${maxRounds} fix rounds`, stage: label, failures: verify.failures })
     rounds.verify++
-    const ask = verify.result === 'PASS'
+    // formatter-only fixes are mechanical; failing checks need the judgement model
+    const formatOnly = verify.result === 'PASS'
+    const ask = formatOnly
       ? `commit the formatter changes to: ${formatter.join(', ')}`
       : `make the checks pass without weakening them. Verbatim failure:\n${verify.failures || verify.report}`
     log(`${label} round ${round + 1}: ${verify.result}`)
-    await implement(fixBrief('verification', [ask]), phase, `fix ${label} r${round + 1}`, 'fixVerify')
+    await implement(fixBrief('verification', [ask]), phase, `fix ${label} r${round + 1}`, 'fixVerify', formatOnly ? FAST : {})
   }
 }
 
@@ -293,7 +303,7 @@ try {
       () => (a.security === false ? Promise.resolve(SECURITY_OFF)
         : agent(securityBrief(), { agentType: 'security-reviewer', schema: SECURITY, phase: 'Gates', label: `security r${round + 1}` })),
       () => (a.smoke === false ? Promise.resolve(SMOKE_OFF)
-        : agent(smokeBrief(), { agentType: 'smoke-tester', schema: SMOKE, phase: 'Gates', label: `smoke r${round + 1}` })),
+        : agent(smokeBrief(), { agentType: 'smoke-tester', schema: SMOKE, phase: 'Gates', label: `smoke r${round + 1}`, model: FAST.model })),
     ])
     security = sec || { verdict: 'BLOCK', blocking: [], should: [], report: 'security-reviewer returned nothing' }
     smoke = smk || { result: 'FAIL', report: 'smoke-tester returned nothing' }

@@ -1,13 +1,13 @@
 ---
 name: linear-poll
-description: "One tick of the Linear poll loop. Finds Todo issues assigned to me in the current cycle, dispatches a background coordinator session (own worktree) for each new one, wakes coordinators whose clarification questions or plan approvals were answered, relays pull request events (CI, reviews, merges) to coordinators, and restarts coordinators that died mid-ticket. Run on a schedule with `/loop 10m /linear-poll` or via `/agent-workflow start`; can also be run once by hand."
+description: "One tick of the Linear poll loop. Finds Todo issues assigned to me in the current cycle, dispatches a background coordinator session (own worktree) for each new one, wakes coordinators whose clarification questions or plan approvals were answered, relays pull request events (CI, reviews, merges) to coordinators, and restarts coordinators that died mid-ticket. Run on the schedule `/agent-workflow start` creates (config `poll_cron`); can also be run once by hand."
 argument-hint: "[--dry-run]"
 allowed-tools: [Bash, Read, Write, Agent, ListAgents, SendMessage, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_comments]
 ---
 
 # Linear poll — one tick
 
-This runs between the user's turns in the main (dispatcher) session. It must be cheap and must never block: a handful of Linear reads, one script call per new ticket, and a one-line report. Do not fetch descriptions you do not need, do not read code, do not implement anything.
+This runs between turns in the dedicated dispatcher session, and every tick re-sends that session's context. It must be cheap and must never block: a handful of Linear reads, one script call per new ticket, and a one-line report. Do not fetch descriptions you do not need, do not read code, do not implement anything.
 
 Config: `~/.claude/skills/agent-workflow/config.local.md`. If it does not exist, print one line telling the user to run `/agent-workflow start`, and stop.
 
@@ -84,7 +84,7 @@ For each repo in the config's repo table (deduplicated), run
 ```
 nu ~/.claude/skills/linear-poll/scripts/pr-sweep.nu <repo> --since <last tick time, ISO 8601>
 ```
-Last tick time: keep it in `~/.claude/agent-workflow/last-tick.local` (write the current time at the end of every tick; if the file is missing use now minus twice the interval). Group rows by `ticket`; ignore rows with an empty ticket. For each ticket with a coordinator session (running or exited), build **one** message listing only actionable rows:
+Last tick time: keep it in `~/.claude/agent-workflow/last-tick.local` (write the current time at the end of every tick; if the file is missing use now minus one hour; after a night or weekend without ticks the stored time covers the gap). Group rows by `ticket`; ignore rows with an empty ticket. For each ticket with a coordinator session (running or exited), build **one** message listing only actionable rows:
 
 - `ci: fail` → `PR #N (<branch>): CI failing`
 - `review: CHANGES_REQUESTED` → `PR #N: changes requested`

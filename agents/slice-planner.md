@@ -30,6 +30,7 @@ If you notice the task drifting from the goal, or a guardrail blocking the task,
 - **No speculative generality**: build what the acceptance criteria need. Note deferred ideas under "Not now".
 - **Dependencies honest**: say which slices depend on which. A slice with no unmerged dependency branches from the default branch and ships as a standalone PR; a dependent slice is stacked on its dependency. Fewer dependencies means more freedom to reorder by priority.
 - **Priority per slice**: 1 (urgent) to 4 (low), from value and risk reduction: skeleton and flag first, user-visible value next, cleanup last. Humans may re-prioritise in Linear later.
+- **Gates per slice**: `smoke: true` when the slice has user-visible, API, CLI or integration behaviour; `security: true` when it adds or changes dependencies, auth or permissions, an input boundary, secrets or crypto, persistence of user data, infra or IAM. Each gate costs an agent run per slice, so flag honestly in both directions.
 - **Guardrails per slice**: copy the spec's guardrails that apply and add slice-specific ones (files not to touch, APIs to keep stable).
 
 ## Output format

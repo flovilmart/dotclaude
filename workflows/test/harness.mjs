@@ -33,7 +33,7 @@ export async function run(script, args, replies = {}) {
   const calls = []
   const queues = Object.fromEntries(Object.entries(replies).map(([k, v]) => [k, Array.isArray(v) ? [...v] : v]))
   const agent = async (prompt, opts) => {
-    calls.push({ type: opts.agentType, label: opts.label, prompt })
+    calls.push({ type: opts.agentType, label: opts.label, prompt, model: opts.model, effort: opts.effort })
     const q = queues[opts.agentType]
     if (typeof q === 'function') return q(prompt, opts)
     if (q && q.length) return q.shift()
