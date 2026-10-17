@@ -174,3 +174,4 @@ The poll relays PR events as one message per ticket; humans may also attach and 
 - Every phase change: one line in the state file `## Log`, and the `phase:` field. Slice statuses: `todo` → `in-progress` → `awaiting-validation` ⇄ `in-review` → `merged` (plus `blocked`, and `needs-reviewer` between validation and review).
 - Linear comments are for durable facts (questions, plan, PRs, pauses), not progress chatter. One comment per phase at most.
 - When a human attaches and asks "where are we", answer from the state file in under ten lines.
+- Wakes can repeat: the watcher and the dispatcher may both deliver the same news (an answer, a plan approval). Check it against the state file and Linear, and ignore what you already handled.

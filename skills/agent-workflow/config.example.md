@@ -36,7 +36,13 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 - dispatcher_name: dispatcher    # name of the main session (start it with `claude --name dispatcher`, or /rename)
 
 ## Poll
-- poll_cron: "*/15 8-19 * * 1-5"  # when the poll runs (local time): every 15 min, 8:00-19:59, Mon-Fri. Each tick re-sends the dispatcher's context, so keep it sparse
+The watcher (skills/linear-poll/scripts/watch.nu) polls Linear and GitHub in nushell and wakes the dispatcher only when it's needed.
+- linear_api_key_ref: op://Private/Linear/credential   # 1Password reference to a Linear personal API key; watch.nu reads it with `op read` at start. Never the key itself
+- watch: monitor                 # monitor (watch.nu streams events to the dispatcher; quiet cycles cost no tokens) | cron (poll_cron runs one watch.nu cycle per tick)
+- watch_interval: 60             # seconds between Linear checks; PRs every second check
+- watch_hours: 8-19              # local hours the watcher acts (8:00-19:59)
+- watch_days: 1-5                # 1 = Monday
+- poll_cron: "*/15 8-19 * * 1-5"  # cron mode only; each tick re-sends the dispatcher's context
 - pre_spec_next_cycle: false     # also run the spec gate (questions only, no worktree) on my Todo issues in the NEXT cycle
 
 ## Human gates

@@ -9,7 +9,7 @@ allowed-tools: [Bash, Read, Write, Edit, Glob, ListAgents, SendMessage, CronCrea
 
 You are the **dispatcher**: the user's main session. Your only jobs here are to configure the workflow, start and stop the poll loop, dispatch coordinators, relay clarifications, and report status. You never implement tickets yourself; each ticket gets its own background coordinator session (`claude --bg --agent ticket-coordinator`) in its own worktree. Keep every turn short so you stay available for whatever else the user asks.
 
-Config lives in `~/.claude/skills/agent-workflow/config.local.md` (template: `config.example.md` next to it). Scripts live in `~/.claude/skills/linear-poll/scripts/`.
+Config lives in `~/.claude/skills/agent-workflow/config.local.md` (template: `config.example.md` next to it). Scripts live in `~/.claude/skills/linear-poll/scripts/`. The poll is `watch.nu`, a nushell watcher that polls Linear and GitHub and dispatches without the model; its events are handled by the `linear-poll` skill.
 
 Subcommand = `$0`. Ticket id = `$1` when present.
 
@@ -22,6 +22,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
    ```
    claude --version            # needs 2.1.290+ (background sessions addressable by name)
    nu --version
+   op --version                # 1Password CLI: the watcher reads the Linear API key with op read
    gh --version; gh extension list | grep -i stack   # gh-stack optional; manual stacking otherwise
    tmux display-message -p '#S' 2>/dev/null          # optional; used as trust-dialog fallback
    ```
@@ -31,16 +32,20 @@ Subcommand = `$0`. Ticket id = `$1` when present.
    nu ~/.claude/skills/linear-poll/scripts/selftest.nu
    ```
    It first checks that `nu` is at least the version the scripts are tested on (`MIN_NU` in `selftest.nu`). A failure here means the poll would misbehave; stop and show the failing check (for an old nu: `brew upgrade nushell`).
-3. **Dedicated session.** Every poll tick re-sends this whole conversation, so the dispatcher must stay small. If this conversation already holds unrelated work, say so and recommend starting a fresh `claude --name dispatcher` in its own tmux window for the workflow, and doing other work elsewhere. Don't block on it.
+3. **Dedicated session.** Every watcher event and Monitor re-arm re-sends this whole conversation, so the dispatcher must stay small. If this conversation already holds unrelated work, say so and recommend starting a fresh `claude --name dispatcher` in its own tmux window for the workflow, and doing other work elsewhere. Don't block on it.
 4. **Session name.** Call `ListAgents`; the first line is this session's name. If it differs from `dispatcher_name` in the config, update the config to the real name (coordinators message you by it) and tell the user they can run `/rename <name>` to make it stable.
-5. **Poll loop.** Call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with `cron: <poll_cron>` and the prompt `/linear-poll`. Report the cron id and its next run time. Recurring crons expire after 7 days: say so, and that `/agent-workflow start` re-arms it (`status` warns when it's gone).
-6. Finish with: the cron id, how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).
+5. **Watcher.** `linear_api_key_ref` missing → ask for it (onboarding group 1) and stop here. Otherwise run `nu ~/.claude/skills/linear-poll/scripts/watch.nu --check`: it signs in to Linear through `op read` and prints who you are and your open issues. A failure → show it and stop (`op signin` when 1Password is locked). Then:
+   - `watch: monitor` (default): `CronList`, and `CronDelete` any old `/linear-poll` task. Then:
+     1. If no watcher is running (`~/.claude/agent-workflow/watch.pid` names no live process): skip stale history with `nu ~/.claude/skills/linear-poll/scripts/follow.nu --reset`, then start the watcher on its own, so it outlives Monitor's 30-minute cap and reads the API key only once: in tmux, `tmux new-window -d -n aw-watcher "nu ~/.claude/skills/linear-poll/scripts/watch.nu"` (the window shows its events live); outside tmux, Bash with `run_in_background` and the same command (it then lives as long as this session; say so). 1Password may ask to authorize `op` once.
+     2. Start `Monitor` with `command: nu ~/.claude/skills/linear-poll/scripts/follow.nu`, `description: agent-workflow watcher: handle each line per the linear-poll skill`, `timeout_ms: 1800000`. It delivers each new line of the watcher's `events.log` once; re-arm it on every expiry (`linear-poll` skill). Events written while nobody listened are delivered when it starts.
+   - `watch: cron`: call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with `cron: <poll_cron>` and the prompt `/linear-poll`. Report the cron id and its next run time. Recurring crons expire after 7 days: say so, and that `/agent-workflow start` re-arms it.
+6. Finish with: the watcher mode (monitor, or the cron id), how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).
 
 ### Onboarding questions (one group at a time)
 
-- **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; label to use while waiting for clarifications. Tell the user that only issues assigned to them are ever polled.
+- **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; label to use while waiting for clarifications. Tell the user that only issues assigned to them are ever polled. The watcher needs a Linear personal API key (created in Linear's settings, under the API / security section): ask them to store it in 1Password and give its reference (`op://<vault>/<item>/<field>`) for `linear_api_key_ref`. Never ask for or write the key itself.
 - **Group 2 — Repos**: default checkout path, plus optional `project:` / `label:` → path rows. Paths use `~/src/<org>/<repo>`.
-- **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), coordinator model (`sonnet` recommended), fast model for mechanical stages (`sonnet`), max parallel coordinators, poll schedule (default weekdays 8:00-19:59 every 15 min).
+- **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), coordinator model (`sonnet` recommended), fast model for mechanical stages (`sonnet`), max parallel coordinators, watcher hours (default weekdays 8:00-19:59).
 - **Group 4 — Human gates**: plan approval (`human` recommended), and the coworkers to request once a PR is validated when CODEOWNERS names nobody. Explain the flow in two lines: you validate a draft PR by marking it Ready for review, which requests the coworker; auto-merge only after the coworker approves.
 
 Write the answers into `config.local.md` using the template's structure; cache `team_id` from `list_teams`.
@@ -63,7 +68,7 @@ Then **Waiting on coworkers**: non-draft PRs with `requested` reviewers and no a
 Then:
 
 - `nu ~/.claude/skills/linear-poll/scripts/sessions.nu` → coordinators (name, state, status, waitingFor). A `waitingFor` of `permission prompt` means the user must `claude attach <ticket>` to answer it.
-- `CronList` → whether the poll loop is armed. Not armed (crons expire after 7 days) → say so first and offer `/agent-workflow start`.
+- Watcher: `~/.claude/agent-workflow/watch.pid` names a live process (`ps -p <pid>`) and `lastRun` in `watch-state.json` is recent (within a few intervals during watch hours). Cron mode: `CronList` shows the `/linear-poll` task. Not running → say so first and offer `/agent-workflow start`. Mention `tell:` lines from `watch.log` of the last day that the user may have missed.
 - `nu ~/.claude/skills/linear-poll/scripts/pr-sweep.nu <repo>` per configured repo → open PRs by ticket with `ci` / `review` / `draft` / `autoMerge` columns.
 - `list_issues` with `assignee: "me"` and `label: <needs_spec_label>`, then `label: <needs_plan_label>` → tickets waiting on the human.
 - For each coordinator: the first lines of `~/.claude/agent-workflow/state/<ticket>.md` (phase and slice table), if present.
@@ -72,7 +77,7 @@ Then:
 
 ## `stop`
 
-1. `CronList`, then `CronDelete` every task whose prompt is `/linear-poll`.
+1. Stop the watcher: `tmux kill-window -t aw-watcher` if it runs there, else end the process named in `~/.claude/agent-workflow/watch.pid`. `TaskStop` the `follow.nu` Monitor. `CronList`, then `CronDelete` every task whose prompt is `/linear-poll`.
 2. Ask whether to also stop running coordinators. If yes: for each session from `sessions.nu` with a live `pid`, send it a `SendMessage` saying "stop: leave the worktree clean, post a status comment on the Linear issue, then end your turn"; do not kill processes. Only `claude stop <id>` if the user explicitly asks.
 
 ---

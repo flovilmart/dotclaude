@@ -20,7 +20,9 @@ of just the affected criteria. `/agent-workflow status` lists everything **waiti
 
 ```
  you ──▶ main session ("dispatcher")              one process, always free
-            │  /linear-poll on poll_cron           weekdays every 15 min; dedicated session
+            │  Monitor ← follow.nu ← events.log ← watch.nu (tmux window aw-watcher)
+            │        nushell: polls Linear + GitHub every minute, dispatches itself,
+            │        and writes a line only when the dispatcher is needed
             │
             ├─▶ claude --bg --name ENG-123 --agent ticket-coordinator   (worktree monorepo-wt2)
             │        │ /ticket-workflow ENG-123 dispatcher
@@ -45,7 +47,10 @@ at any time and talk to it; it answers from its state file and resumes.
 | Path | Role |
 |------|------|
 | `skills/agent-workflow/` | Control plane in the main session: `start`, `status`, `stop`, `dispatch <id>`, `clarify <id>`. Holds `config.example.md`; your copy is `config.local.md` (gitignored). |
-| `skills/linear-poll/` | One poll tick (cheap). Scheduled by `/agent-workflow start` via a cron, or `/loop 10m /linear-poll`. |
+| `skills/linear-poll/` | Handles the watcher's events in the dispatcher: relay to a coordinator, early spec gate, tell you. |
+| `skills/linear-poll/scripts/watch.nu` | The poll, in nushell: Linear (GraphQL, key via `op read`), sessions and PRs every minute in working hours; acts through `dispatch.nu` / `resume.nu`; writes `send` / `spec-gate` / `tell` / `info` lines to stdout and `events.log`. Runs on its own in a tmux window (default) or once per cron tick (`--once`). `--check` tests the key and queries; `--dry-run` shows what it would do. |
+| `skills/linear-poll/scripts/follow.nu` | Under the Monitor tool: delivers each new line of `events.log` to the dispatcher exactly once (a cursor survives re-arms), and says when the watcher has stopped. |
+| `skills/linear-poll/scripts/rules.nu`, `config.nu`, `linear.nu` | The poll's rules as pure functions (tested), the config reader, the Linear GraphQL calls. |
 | `skills/linear-poll/scripts/*.nu` | `ensure-worktree.nu` (sibling `<repo>-wt<N>` pool, same convention as `linear-ticket`), `dispatch.nu` (worktree + `claude --bg`), `sessions.nu` (wraps `claude agents --json --all`), `resume.nu` (wake a stopped coordinator). |
 | `skills/ticket-workflow/` | The per-ticket pipeline the coordinator runs. `pr-body.md` is the PR body template: owner validation block + coworker summary. |
 | `skills/stack-pr/` | Stacked PR mechanics: GitHub native `gh stack` when installed, manual `gh pr create --base` otherwise. |
@@ -62,7 +67,7 @@ at any time and talk to it; it answers from its state file and resumes.
 | `agents/smoke-tester.md` | Starts the app the repo's way and exercises the slice's acceptance criteria, flag off and on, with evidence. |
 | `skills/linear-poll/scripts/profile-key.nu` | Whether the cached repo profile (`~/.claude/agent-workflow/profiles/<repo>.md`) is still valid: a key over the agent docs, manifests and CI config on the default branch. A fresh profile skips repo-scout. |
 | `skills/linear-poll/scripts/pr-sweep.nu` | Open and recently merged PRs by ticket with CI, review and auto-merge state; feeds PR events to coordinators. |
-| `skills/linear-poll/scripts/selftest.nu` | Offline test of the worktree allocator (including ticket holds) and branch parsing (temp repo, no network), plus the workflow tests when node is installed. |
+| `skills/linear-poll/scripts/selftest.nu` | Offline tests (temp repo, no network): worktree allocator and holds, profile key, branch parsing, config reader, the poll rules, the watcher end to end with a fake `claude`, and the workflow tests when node is installed. |
 | `hooks/agent-log.sh` + `skills/agent-workflow/scripts/report.nu` | One JSON line per subagent start/stop and session end; `/agent-workflow report` turns it into per-ticket, per-agent run counts and minutes. |
 
 All agents are generic. Repository specifics come from the repo's `AGENTS.md` (or `CLAUDE.md`,
@@ -76,8 +81,8 @@ loads `AGENTS.md` automatically only when the repo has no `CLAUDE.md`; a `CLAUDE
    ```nu
    claude --name dispatcher
    ```
-   Don't do other work in it: every poll tick re-sends the whole conversation, so a long working
-   session makes every tick expensive. Talk to it only for workflow commands.
+   Don't do other work in it: every watcher event re-sends the whole conversation, so a long working
+   session makes every event expensive. Talk to it only for workflow commands.
 2. `/agent-workflow start`. First run asks a few questions (team, state names, repo paths,
    coordinator permission mode and model, poll schedule). Only issues assigned to you are ever polled and writes
    `~/.claude/skills/agent-workflow/config.local.md`. It then creates the poll cron.
@@ -92,7 +97,7 @@ When the spec-challenger finds the ticket under-specified, the coordinator posts
 questions (each with why it matters and a proposed default) as a Linear comment, labels the issue
 `needs-spec`, and messages the dispatcher. Answer either way:
 
-- in Linear: reply in the thread or edit the issue. The next poll tick notices and wakes the coordinator.
+- in Linear: reply in the thread or edit the issue. The watcher notices within a minute and wakes the coordinator.
 - in the main session: just answer in prose, then `/agent-workflow clarify ENG-123` (or the dispatcher
   does it when it recognises the answer). It writes a `## Spec` section into the issue description,
   removes the label, and wakes the coordinator.
@@ -103,8 +108,8 @@ assumptions in the spec, and continues.
 
 ## Closing the loop
 
-- **PR events.** Every poll tick runs `pr-sweep.nu` per repo and sends each coordinator one message with
-  what changed on its PRs: CI failing, changes requested, new comments, approved and green, merged. The
+- **PR events.** Every other watcher cycle (about every 2 minutes) runs `pr-sweep.nu` per repo and sends each
+  coordinator one message with what newly changed on its PRs (each condition is reported once): CI failing, changes requested, new comments, approved and green, merged. The
   coordinator fixes CI from the failing job's log, applies review threads and replies on each, re-requests
   the reviewer, and after a merge syncs the stack and moves the Linear sub-issue to Done. When every
   sub-issue is merged the ticket goes to Done.
@@ -156,7 +161,7 @@ claude logs ENG-123                 # recent output
 ```
 
 A coordinator that is idle and unattached for about an hour is stopped by the supervisor; its
-conversation is kept, and the next poll tick (or `claude attach`) restarts it where it left off.
+conversation is kept, and the watcher (when there is news for it) or `claude attach` restarts it where it left off.
 
 ## Briefs, subtasks and priority
 
@@ -177,9 +182,10 @@ conversation is kept, and the next poll tick (or `claude attach`) restarts it wh
 
 Where the tokens and the minutes go, and what keeps them down:
 
-- **Poll ticks** re-send the dispatcher's context: keep that session dedicated and small, and the
-  schedule sparse (`poll_cron`, weekdays every 15 min by default). `/usage` → Loops shows what the
-  poll costs. Recurring crons expire after 7 days; `/agent-workflow status` warns when it's gone.
+- **The poll costs no tokens** while nothing happens: `watch.nu` polls Linear and GitHub in nushell and
+  wakes the dispatcher only for a line it must act on. The `follow.nu` Monitor is re-armed every 30
+  minutes, a small turn; the watcher itself keeps running and reads the API key once. Keep the dispatcher session dedicated anyway: every event and re-arm re-sends its context.
+  Linear allows 2,500 requests an hour per API key; the watcher uses about 60–120.
 - **Models by stage**: the coordinator and the mechanical stages (verify, smoke, formatter fixes) run on
   `sonnet` at low effort (`model`, `fast_model`); judgement stages (spec, plan, design challenge,
   implement, code review, fixes for failing checks, security) inherit your default model.

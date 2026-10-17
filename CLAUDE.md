@@ -84,7 +84,7 @@ Autonomous ticket pipeline for Linear issues **assigned to me** (never the whole
 
 ```nu
 claude --name dispatcher          # main session; stays free, only dispatches
-/agent-workflow start             # onboarding on first run, then arms the /linear-poll cron
+/agent-workflow start             # onboarding on first run, then starts the watcher (tmux window aw-watcher) and follows its events
 /agent-workflow status | stop | dispatch <id> | clarify <id> | report
 claude agents                     # one coordinator session per ticket, in its own <repo>-wt<N> worktree
 claude attach ENG-123             # talk to a coordinator; ← to detach
@@ -97,6 +97,7 @@ claude attach ENG-123             # talk to a coordinator; ← to detach
 - Human gates: I approve the slice plan (`plan_approval`), I validate each draft PR (validation packet from `skills/ticket-workflow/pr-body.md`) by marking it ready, then a coworker is requested and approves. Agents never mark ready or approve.
 - Gates before a draft reaches me: `verifier` (incl. slice size), `security-reviewer`, `smoke-tester`; every commit code-reviewed. The poll relays PR events (CI, reviews, validation, merges); auto-merge only after the coworker's approval via branch protection; sub-issues go to Done on merge.
 - `workflows/test/` tests the saved workflows offline (`node --test`), run by `selftest.nu`.
-- Cost: dispatcher is a dedicated session (every poll tick re-sends its context; `poll_cron` weekdays every 15 min); coordinator and mechanical stages on `sonnet`; verification scoped to affected packages; fixes carry blocking findings only; security/smoke only on slices the planner flags; repo profiles cached per repo (`profile-key.nu`).
+- Poll: `skills/linear-poll/scripts/watch.nu` polls Linear (GraphQL, key via `op read` of `linear_api_key_ref`) and GitHub every minute in working hours, dispatches itself, and writes a line to `events.log` only when the dispatcher is needed; `follow.nu` delivers those under Monitor; rules in `rules.nu`, tested by `selftest.nu`.
+- Cost: dispatcher is a dedicated session (each watcher event re-sends its context); coordinator and mechanical stages on `sonnet`; verification scoped to affected packages; fixes carry blocking findings only; security/smoke only on slices the planner flags; repo profiles cached per repo (`profile-key.nu`).
 - Hooks log every subagent run to `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises it; `nu ~/.claude/skills/agent-workflow/scripts/tui.nu` is a live terminal dashboard over it. `selftest.nu` tests the scripts offline.
 - Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).
