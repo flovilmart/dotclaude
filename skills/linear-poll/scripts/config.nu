@@ -38,6 +38,7 @@ export const SCHEMA = {
   linear_oauth_client_id: {type: string}
   linear_oauth_port: {type: int}
   linear_oauth_host: {type: string}
+  linear_oauth_redirect_uri: {type: string}
   linear_api_key_ref: {type: string}
   watch: {type: string, choices: [monitor cron]}
   watch_interval: {type: int}

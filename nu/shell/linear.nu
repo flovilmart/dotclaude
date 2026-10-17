@@ -36,7 +36,8 @@ export def logout [--config: string = ""] {
 export def status [--config: string = ""] {
   let c = (cfg $config)
   if (uses-oauth $c) {
-    {method: "oauth"} | merge (oauth status (provider $c))
+    let p = (provider $c)
+    {method: "oauth", redirect_uri: (oauth redirect-uri $p)} | merge (oauth status $p)
   } else {
     let ref = ($c.linear_api_key_ref? | default "")
     {method: "api-key", source: (if ($env.LINEAR_API_KEY? | default "") != "" { "LINEAR_API_KEY" } else if $ref != "" { $ref } else { "not configured" })}

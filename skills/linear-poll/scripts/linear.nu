@@ -30,6 +30,7 @@ export def provider [cfg] {
     scope_sep: ","
     port: ($cfg.linear_oauth_port? | default 8765)
     host: ($cfg.linear_oauth_host? | default "127.0.0.1")
+    redirect_uri: ($cfg.linear_oauth_redirect_uri? | default "")
     extra: {actor: "user"}
   }
 }

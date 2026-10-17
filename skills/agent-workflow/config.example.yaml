@@ -44,6 +44,10 @@ dispatcher_name: dispatcher  # name of the main session (start it with `claude -
 linear_oauth_client_id:      # client ID of your Linear OAuth app (Settings → API → OAuth applications); sign in once with `linear login`
 linear_oauth_port: 8765      # the login listens on http://<host>:<port>/callback: register exactly that URL as a callback URL
 linear_oauth_host:           # 127.0.0.1 when empty; set to localhost if that's what the app has registered
+linear_oauth_redirect_uri:   # when Linear refuses loopback URLs: a public https URL that forwards to 127.0.0.1:<port>, e.g. a dev tunnel:
+                             #   devtunnel create agent-workflow --allow-anonymous; devtunnel port create agent-workflow -p 8765
+                             #   devtunnel host agent-workflow     (keep it running while `linear login` waits)
+                             # then register and set https://<tunnel>-8765.<region>.devtunnels.ms/callback here
 linear_api_key_ref: op://Private/Linear/credential   # instead of OAuth: 1Password reference to a personal API key, read with `op read`; never the key itself
 watch: monitor               # monitor (watch.nu streams events to the dispatcher; quiet cycles cost no tokens) | cron (poll_cron runs one cycle per tick)
 watch_interval: 60           # seconds between Linear checks; PRs every second check

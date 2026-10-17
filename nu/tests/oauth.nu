@@ -59,6 +59,25 @@ def "authorize url carries the PKCE and loopback parameters" [] {
 }
 
 @test
+def "a public redirect uri replaces the loopback one in the authorize url" [] {
+  let p = (provider {redirect_uri: "https://abc-8765.euw.devtunnels.ms/callback"})
+  assert equal (oauth redirect-uri $p) "https://abc-8765.euw.devtunnels.ms/callback"
+  let q = (oauth authorize-url $p {challenge: "ch", method: "S256"} "st" | url parse | get query)
+  assert ($q | str contains "redirect_uri=https%3A%2F%2Fabc-8765.euw.devtunnels.ms%2Fcallback")
+}
+
+@test
+def "the token exchange sends the same public redirect uri" [] {
+  let ep = (fake-token-endpoint 18775 {access_token: "a1", refresh_token: "r1", expires_in: 86400})
+  let p = ($ep.provider | upsert redirect_uri "https://abc-8765.euw.devtunnels.ms/callback")
+  oauth exchange $p "code-1" "verifier-1" | ignore
+  let form = (form-of $ep.out)
+  done $ep
+  assert equal $form.redirect_uri "https://abc-8765.euw.devtunnels.ms/callback"
+  assert equal $form.code_verifier "verifier-1"
+}
+
+@test
 def "callback code is taken from a request line or a pasted url" [] {
   assert equal (oauth parse-callback "GET /callback?code=abc%2B1&state=st HTTP/1.1" "st") "abc+1"
   assert equal (oauth parse-callback "http://127.0.0.1:18765/callback?state=st&code=xyz" "st") "xyz"

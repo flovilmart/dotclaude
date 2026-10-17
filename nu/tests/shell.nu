@@ -21,8 +21,14 @@ def "linear status reports an API key setup without reading the key" [] {
 @test
 def "linear status reports an OAuth setup and whether it is signed in" [] {
   let s = (linear status --config (config-with "linear_oauth_client_id: client-1"))
-  assert equal ($s | select method provider) {method: "oauth", provider: "linear"}
+  assert equal ($s | select method provider redirect_uri) {method: "oauth", provider: "linear", redirect_uri: "http://127.0.0.1:8765/callback"}
   assert equal ($s.signed_in | describe) "bool"
+}
+
+@test
+def "linear status shows a configured public redirect uri" [] {
+  let s = (linear status --config (config-with "linear_oauth_client_id: client-1\nlinear_oauth_redirect_uri: https://t-8765.euw.devtunnels.ms/callback"))
+  assert equal $s.redirect_uri "https://t-8765.euw.devtunnels.ms/callback"
 }
 
 @test

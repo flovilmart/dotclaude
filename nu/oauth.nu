@@ -12,6 +12,8 @@
 #     scopes: [read write], scope_sep: ","               # scope_sep defaults to " "
 #     port: 8765                                         # registered redirect http://<host>:<port>/callback
 #     host: "127.0.0.1"                                  # optional; some providers only accept "localhost"
+#     redirect_uri: "https://…/callback"                # optional: a public URL (e.g. a dev tunnel) that forwards to
+#                                                        # 127.0.0.1:<port>, for providers that refuse loopback URLs
 #     extra: {actor: user}                               # optional extra authorize parameters
 #     store: "keychain" | "file", store_dir: "..."       # optional; default keychain on macOS, file elsewhere
 #   }
@@ -41,7 +43,10 @@ export def pkce [] {
 
 # ── authorization request and callback ──────────────────────────────────────
 
+# The redirect URL sent to the provider (and registered with it): the public redirect_uri when
+# set, else the loopback URL. The listener is on 127.0.0.1:<port> either way.
 export def redirect-uri [p] {
+  if ($p.redirect_uri? | default "") != "" { return $p.redirect_uri }
   $"http://($p.host? | default '127.0.0.1'):($p.port)/callback"
 }
 
@@ -196,6 +201,9 @@ export def login [p, --manual, --timeout: duration = 5min] {
   let url = (authorize-url $p $pk $state)
   let listen = not $manual and (which nc | is-not-empty)
   print $"Opening the browser to authorize ($p.name). If it doesn't open, visit:\n($url)\n"
+  if ($p.redirect_uri? | default "") != "" {
+    print $"Waiting on 127.0.0.1:($p.port) for the callback forwarded from ($p.redirect_uri)\n"
+  }
   let opener = (["open" "xdg-open"] | where {|o| which $o | is-not-empty } | get 0?)
   if $opener != null { do { ^$opener $url } | complete | ignore }
   let input = if $listen {

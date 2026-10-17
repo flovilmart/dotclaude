@@ -93,6 +93,13 @@ def "a comma separated reviewers value from the old format becomes a list" [] {
 }
 
 @test
+def "a configured public redirect uri reaches the linear provider" [] {
+  let p = (linear provider ((example) | upsert linear_oauth_client_id "client-1" | upsert linear_oauth_redirect_uri "https://t-8765.euw.devtunnels.ms/callback"))
+  assert equal $p.redirect_uri "https://t-8765.euw.devtunnels.ms/callback"
+  assert equal $p.port 8765
+}
+
+@test
 def "linear uses an API key unless an OAuth client is configured" [] {
   let cfg = (example)
   assert equal (linear uses-oauth $cfg) false
@@ -102,7 +109,7 @@ def "linear uses an API key unless an OAuth client is configured" [] {
 @test
 def "the linear OAuth provider is a public client on the loopback port acting as the user" [] {
   let p = (linear provider ((example) | upsert linear_oauth_client_id "client-1"))
-  assert equal ($p | select client_id scope_sep port host extra) {client_id: "client-1", scope_sep: ",", port: 8765, host: "127.0.0.1", extra: {actor: "user"}}
+  assert equal ($p | select client_id scope_sep port host redirect_uri extra) {client_id: "client-1", scope_sep: ",", port: 8765, host: "127.0.0.1", redirect_uri: "", extra: {actor: "user"}}
   assert ("client_secret" not-in $p)
 }
 
