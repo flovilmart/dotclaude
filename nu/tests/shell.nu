@@ -155,3 +155,25 @@ def "inbox open windows opens a tmux window per session not already attached" []
   ]
   assert equal ($calls | where $it starts-with "select-window") ["select-window -t %7"]
 }
+
+@test
+def "inbox board groups every running session waits first then working and done" [] {
+  let b = (with-env {PATH: (fake-sessions)} { inbox board --state-dir (fake-state) })
+  assert equal ($b | select name waiting) [
+    {name: "ENG-2", waiting: "needs input"}
+    {name: "ENG-5", waiting: "needs input"}
+    {name: "ENG-6", waiting: "needs plan validation"}
+    {name: "ENG-3", waiting: "working"}
+    {name: "ENG-1", waiting: "waiting review"}
+  ]
+  assert equal $inbox.GROUPS.0 $inbox.WAITS.0
+}
+
+@test
+def "inbox attach selects an attached session and opens a window for another" [] {
+  let log = (mktemp | str trim)
+  let r = (with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { [(inbox attach b) (inbox attach e)] })
+  assert equal ($r | get action) [selected opened]
+  let calls = (open --raw $log | lines | where $it !~ "^list-panes")
+  assert equal $calls ["select-window -t %7" "select-pane -t %7" "new-window -n ENG-5 -c /w/e claude attach e"]
+}

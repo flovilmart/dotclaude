@@ -10,6 +10,9 @@
 #   inbox open --all          also the sessions waiting review
 #   inbox open --windows      a tmux window per session instead
 #   inbox open --dry-run      what it would open, without opening anything
+#   inbox board               every running background session, grouped: the waits above, then working, done
+#                             (what the /control pane draws)
+#   inbox attach <id>         bring one session up in tmux: its pane if attached, else a new window
 #
 # What a ticket waits on comes from the watcher's waiting.json (Linear labels and open PRs, refreshed every
 # minute while it runs) and the coordinator's state file; a session Claude reports as blocked with neither
@@ -47,28 +50,35 @@ def why [s: record, waits: record, dir: string] {
   null
 }
 
-# Running sessions waiting on someone, most urgent first, then oldest
-export def main [--state-dir: string = $STATE_DIR] {
+# The groups of the control center, in order: the waits on the owner, then Claude's own states
+export const GROUPS = ["needs input" "needs plan validation" "draft ready" "working" "waiting review" "done"]
+
+# Every running background session with what it waits on (`waiting`, one of GROUPS), most urgent first, then oldest
+export def board [--state-dir: string = $STATE_DIR] {
   let dir = ($state_dir | path expand)
   let waits = (watcher-waits $dir)
   ^claude agents --json
   | from json
-  | where {|s| $s.pid? != null }
+  | where {|s| $s.pid? != null and ($s.kind? | default "background") == "background" }
   | each {|s|
-      let w = (why $s $waits $dir)
-      if $w == null { [] } else { [{
+      let w = (why $s $waits $dir | default {waiting: (if $s.state? == "working" { "working" } else { "done" }), detail: ""})
+      {
         id: $s.id
         name: ($s.name? | default "")
         waiting: $w.waiting
         detail: $w.detail
         cwd: ($s.cwd | str replace $nu.home-dir "~")
         started: ($s.startedAt * 1_000_000 | into datetime)
-        rank: ($WAITS | enumerate | where item == $w.waiting | get index.0)
-      }] }
+        rank: ($GROUPS | enumerate | where item == $w.waiting | get index.0)
+      }
     }
-  | flatten
   | sort-by rank started
   | reject rank
+}
+
+# Running sessions waiting on someone, most urgent first, then oldest
+export def main [--state-dir: string = $STATE_DIR] {
+  board --state-dir $state_dir | where waiting in $WAITS
 }
 
 # tmux panes already running `claude attach <id>`, with that id
@@ -78,6 +88,21 @@ def attached-panes [] {
   | parse "{pane}\t{cmd}"
   | each {|p| {pane: $p.pane, id: ($p.cmd | str trim -c '"' | parse "claude attach {id}" | get id.0? | default "")} }
   | where id != ""
+}
+
+# Bring one session up in tmux: its pane if already attached, else a new window attached to it
+export def attach [id: string] {
+  if ($env.TMUX? | default "") == "" { error make { msg: "inbox attach needs tmux; outside it, run `claude attach <id>`" } }
+  let pane = (attached-panes | where id == $id | get pane.0? | default null)
+  if $pane != null {
+    ^tmux select-window -t $pane
+    ^tmux select-pane -t $pane
+    return {id: $id, action: "selected"}
+  }
+  let s = (^claude agents --json | from json | where {|s| $s.id? == $id } | get 0? | default null)
+  if $s == null { error make { msg: $"no session ($id)" } }
+  ^tmux new-window -n (title {id: $id, name: ($s.name? | default "")}) -c $s.cwd $"claude attach ($id)"
+  {id: $id, action: "opened"}
 }
 
 def title [s: record] { if $s.name == "" { $s.id } else { $s.name | str substring 0..23 } }

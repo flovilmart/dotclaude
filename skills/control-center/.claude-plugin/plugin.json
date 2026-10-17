@@ -1,0 +1,9 @@
+{
+  "name": "control-center",
+  "version": "0.1.0",
+  "description": "/control: a live pane of every background agent, grouped by what it waits on (needs input, plan validation, draft ready, working, waiting review, done)",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Florent Vilmart"
+  }
+}
