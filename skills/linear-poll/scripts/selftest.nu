@@ -12,7 +12,7 @@
 # Fails first when nu is older than MIN_NU: nushell still renames flags and
 # commands between releases, and these scripts are tested on MIN_NU and later.
 
-const MIN_NU = [0 106 0]
+const MIN_NU = [0 111 0]   # tui.nu needs input listen --timeout (0.111); CI tests this and the latest release
 
 # true when the running nu is at least `min` ([major minor patch])
 def nu-at-least [min: list<int>] {
@@ -225,7 +225,7 @@ def main [] {
   let nu_tests = (^nu ($skill_dir | path join ../../../nu/run-tests.nu | path expand) | complete)
   let nu_summary = ($nu_tests.stdout | lines | where {|l| $l =~ '^nu tests:' } | str join)
   if $nu_tests.exit_code != 0 { print ($nu_tests.stdout | lines | where {|l| $l =~ 'FAIL' } | str join "\n") }
-  assert-eq $nu_tests.exit_code 0 $"oauth, test runner, poll rules, config \(($nu_summary | str replace 'nu tests: ' '')\)"
+  assert-eq $nu_tests.exit_code 0 $"oauth, test runner, poll rules, config, syntax of every .nu file \(($nu_summary | str replace 'nu tests: ' '')\)"
 
   print "workflows (node --test)"
   let tests = ($skill_dir | path join ../../../workflows/test | path expand)

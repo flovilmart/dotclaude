@@ -70,6 +70,7 @@ at any time and talk to it; it answers from its state file and resumes.
 | `skills/linear-poll/scripts/profile-key.nu` | Whether the cached repo profile (`~/.claude/agent-workflow/profiles/<repo>.md`) is still valid: a key over the agent docs, manifests and CI config on the default branch. A fresh profile skips repo-scout. |
 | `skills/linear-poll/scripts/pr-sweep.nu` | Open and recently merged PRs by ticket with CI, review and auto-merge state; feeds PR events to coordinators. |
 | `skills/linear-poll/scripts/selftest.nu` | Offline scenario tests (temp repo, no network): worktree allocator and holds, profile key, branch parsing, the watcher and follow.nu end to end with a fake `claude`; then runs the `@test` files and the workflow tests (when node is installed). |
+| `.github/workflows/ci.yml` | Runs `selftest.nu` on every push to main and every PR: Ubuntu with the oldest supported nushell (`MIN_NU`) and the latest, and macOS. |
 | `nu/run-tests.nu`, `**/tests/*.nu` | Unit tests in nushell's standard style: `@test` commands (with `@ignore`, `@before-each`/`@before-all`, `@after-each`/`@after-all`) from `std/testing`, which ships the markers but no runner; `run-tests.nu` finds them with `scope commands` and runs each file in its own process. Covers oauth.nu, the poll rules, the config reader and the runner itself. |
 | `hooks/agent-log.sh` + `skills/agent-workflow/scripts/report.nu` | One JSON line per subagent start/stop and session end; `/agent-workflow report` turns it into per-ticket, per-agent run counts and minutes. |
 

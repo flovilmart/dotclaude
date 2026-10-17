@@ -156,3 +156,20 @@ def "a listener left by an interrupted login is cleared before listening again" 
 def "token without login says to log in" [] {
   assert error {|| oauth token (provider) }
 }
+
+# Linux has no Keychain: there the file store above is what runs, and this test has nothing to do
+@test
+def "keychain store round trips on macOS" [] {
+  if not ((sys host).name =~ "(?i)darwin") { return }
+  let p = (provider {name: $"selftest-(random chars --length 8)", store: "keychain"})
+  let tokens = {access_token: "a b&c", refresh_token: "r1", expires_at: null, scope: "read,write"}
+  oauth store-set $p $tokens
+  let back = (oauth store-get $p)
+  oauth store-set $p ($tokens | upsert refresh_token "r2")
+  let updated = (oauth store-get $p)
+  oauth store-delete $p
+  assert equal $back $tokens
+  assert equal $updated.refresh_token "r2"
+  assert equal (oauth store-get $p) null
+}
+

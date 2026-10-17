@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    name: ${{ matrix.os }} · nu ${{ matrix.nu }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # the oldest nushell the scripts support (MIN_NU in selftest.nu)
+          - os: ubuntu-latest
+            nu: 0.111.0
+            target: x86_64-unknown-linux-gnu
+            sha256: aa5376efaa5f2da98ebae884b901af6504dc8291acf5f4147ac994e9d03cd1ba
+          # the latest release, on Linux and on macOS (BSD nc, Keychain)
+          - os: ubuntu-latest
+            nu: 0.112.2
+            target: x86_64-unknown-linux-gnu
+            sha256: 4038c171dd2618f2413a2aa615b8dab7e9d04852be8200f1755df3e422328395
+          - os: macos-latest
+            nu: 0.112.2
+            target: aarch64-apple-darwin
+            sha256: a61806761db7bc2eddfc313d5ec496c92776a37124bc64a3036374bd55e8c881
+    steps:
+      - uses: actions/checkout@v4
+
+      # The official release tarball, checked against a pinned SHA-256; no third-party action
+      - name: Install nushell ${{ matrix.nu }}
+        env:
+          NU_VERSION: ${{ matrix.nu }}
+          NU_TARGET: ${{ matrix.target }}
+          NU_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          f="nu-${NU_VERSION}-${NU_TARGET}.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$f" "https://github.com/nushell/nushell/releases/download/${NU_VERSION}/$f"
+          echo "${NU_SHA256}  $RUNNER_TEMP/$f" | shasum -a 256 -c -
+          tar xzf "$RUNNER_TEMP/$f" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/nu-${NU_VERSION}-${NU_TARGET}" >> "$GITHUB_PATH"
+
+      # node runs the saved workflows' tests; selftest skips them without it, CI must not
+      - name: Tools
+        run: |
+          nu --version
+          node --version
+          git --version
+          command -v nc
+
+      # Scenarios (worktrees, watcher, follow), every @test file (oauth, runner, rules,
+      # config, syntax of every .nu file) and the workflow tests
+      - name: selftest
+        run: nu skills/linear-poll/scripts/selftest.nu

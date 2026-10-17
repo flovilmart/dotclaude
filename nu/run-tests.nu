@@ -11,8 +11,11 @@
 # Each test receives the context as pipeline input ($in). Test names are plain words
 # (letters, digits, spaces, - and _): the runner calls each test by its name. std/testing only defines
 # these markers; this runner finds them with `scope commands`. Each file runs in its
-# own nu process (without proxy variables: tests talk to 127.0.0.1 only).
+# own nu process, started without proxy variables (tests talk to 127.0.0.1 only; removing
+# them inside the process isn't enough: nushell's jobs and HTTP client can still see them).
 # Exit code 1 when any test fails.
+
+const NO_PROXY = [-u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy -u ALL_PROXY -u all_proxy]
 
 def marked [cmds: list, attr: string] {
   $cmds | where {|c| $attr in ($c.attributes | get name) } | get name
@@ -42,7 +45,6 @@ def runner-script [file: string, cmds: list] {
     }
   })
   [
-    "hide-env --ignore-errors HTTP_PROXY http_proxy HTTPS_PROXY https_proxy ALL_PROXY all_proxy"
     $"source ($file | to json)"
     $"let base = (do $call $before_all)"
     "let results = ["
@@ -72,7 +74,7 @@ def main [...files: string, --filter: string = ""] {
     }
     let script = (^mktemp | str trim)
     runner-script $file ($cmds | where {|c| $c.name in $tests or ($c.attributes.name | any {|a| $a != test }) }) | save --force $script
-    let r = (do { ^nu --no-config-file $script } | complete)
+    let r = (do { ^env ...$NO_PROXY nu --no-config-file $script } | complete)
     rm --force $script
     let rows = (try { $r.stdout | lines | last | from json } catch {
       [{name: "(file)", status: failed, error: ($r.stderr | ansi strip | lines | first 15 | str join "\n")}]
