@@ -23,13 +23,32 @@ def nu-at-least [min: list<int>] {
 }
 
 
-def assert-eq [actual, expected, label: string] {
-  if $actual == $expected {
-    print $"  ok   ($label)"
-  } else {
-    print $"  FAIL ($label): expected '($expected)', got '($actual)'"
-    error make { msg: $"selftest failed: ($label)" }
+use ../../../nu/gha.nu
+
+# A group of checks: printed as a heading, counted in the job summary
+def --env section [name: string] {
+  print $name
+  $env.SELFTEST_SECTION = $name
+  $env.SELFTEST_COUNTS = ($env.SELFTEST_COUNTS? | default [] | append {section: $name, checks: 0})
+}
+
+# Stops the selftest. In GitHub Actions: an annotation and a line in the job summary
+def fail [label: string, detail: string] {
+  print $"  FAIL ($label): ($detail)"
+  let where = ($env.SELFTEST_SECTION? | default "selftest")
+  if (gha enabled) {
+    print (gha annotation error $detail --title $"selftest: ($where): ($label)")
+    gha summary $"### selftest failed\n\n**($where)**: (gha cell $label): (gha cell $detail)\n"
   }
+  error make { msg: $"selftest failed: ($label)" }
+}
+
+def --env assert-eq [actual, expected, label: string] {
+  if $actual != $expected { fail $label $"expected '($expected)', got '($actual)'" }
+  print $"  ok   ($label)"
+  $env.SELFTEST_COUNTS = ($env.SELFTEST_COUNTS? | default [] | each {|c|
+    if $c.section == $env.SELFTEST_SECTION? { $c | update checks ($c.checks + 1) } else { $c }
+  })
 }
 
 # An issue as linear.nu returns it, with overrides
@@ -62,15 +81,14 @@ def main [] {
   let origin = $"($tmp)/origin.git"
   let main = $"($tmp)/demo"
 
-  print "nu"
+  section "nu"
   let min = ($MIN_NU | str join '.')
   if not (nu-at-least $MIN_NU) {
-    print $"  FAIL nu (version | get version) is older than ($min): brew upgrade nushell"
-    error make { msg: $"selftest failed: nu older than ($min)" }
+    fail $"nu ($min) or later" $"nu (version | get version) is older than ($min): brew upgrade nushell"
   }
-  print $"  ok   nu (version | get version) >= ($min)"
+  assert-eq true true $"nu (version | get version) >= ($min)"
 
-  print "setup"
+  section "setup"
   ^git init --quiet --initial-branch=main $src
   git-commit $src "init"
   ".env" | save $"($src)/.gitignore"
@@ -81,7 +99,7 @@ def main [] {
   ^git clone --quiet $origin $main
   "SECRET=1" | save $"($main)/.env"
 
-  print "ensure-worktree.nu"
+  section "ensure-worktree.nu"
   let wt1 = (^nu $ensure $main feat/demo-1 | str trim)
   assert-eq $wt1 $"($tmp)/demo-wt1" "new branch gets demo-wt1"
   assert-eq (^git -C $wt1 branch --show-current | str trim) "feat/demo-1" "demo-wt1 is on feat/demo-1"
@@ -143,7 +161,7 @@ def main [] {
   let released = (^nu $ensure $main feat/demo-10 | str trim)
   assert-eq $released $held "a released worktree is free again"
 
-  print "profile-key.nu"
+  section "profile-key.nu"
   let pkey = $"($skill_dir)/profile-key.nu"
   let cache = $"($tmp)/profiles"
   let k1 = (^nu $pkey $main --dir $cache | from json)
@@ -163,11 +181,11 @@ def main [] {
   assert-eq ($k2.key != $k1.key) true "changing AGENTS.md on the default branch changes the key"
   assert-eq $k2.fresh false "and makes the cached profile stale"
 
-  print "pr-sweep.nu"
+  section "pr-sweep.nu"
   assert-eq (^nu $sweep --parse-branch "florent/eng-123-add-thing-s2-schema" | str trim) "ENG-123" "ticket parsed from Linear-style branch"
   assert-eq (^nu $sweep --parse-branch "main" | str trim) "" "no ticket in main"
 
-  print "watch.nu (fake claude, fixtures)"
+  section "watch.nu (fake claude, fixtures)"
   let q = {body: "🤖 agent-workflow · DEMO-6 · Plan for approval\n...", createdAt: "2026-10-02T00:00:00.000Z"}
   let waiting = (issue DEMO-6 {state: "In Progress", labels: [needs-plan-approval]})
   let bin = $"($tmp)/bin"
@@ -204,7 +222,7 @@ def main [] {
   assert-eq (do $run) [] "second run: nothing new, nothing printed"
   assert-eq ($"($wstate)/watch.log" | path exists) true "actions are logged"
 
-  print "follow.nu"
+  section "follow.nu"
   let follow = $"($skill_dir)/follow.nu"
   let deliver = {|| ^nu $follow --once --state-dir $wstate | lines }
   "999999" | save --force $"($wstate)/watch.pid"
@@ -221,13 +239,15 @@ def main [] {
 
   ^rm -rf $tmp
 
-  print "nu tests (@test files in nu/tests and skills/*/scripts/tests, run-tests.nu)"
+  section "nu tests (@test files in nu/tests and skills/*/scripts/tests, run-tests.nu)"
   let nu_tests = (^nu ($skill_dir | path join ../../../nu/run-tests.nu | path expand) | complete)
   let nu_summary = ($nu_tests.stdout | lines | where {|l| $l =~ '^nu tests:' } | str join)
   if $nu_tests.exit_code != 0 { print ($nu_tests.stdout | lines | where {|l| $l =~ 'FAIL' } | str join "\n") }
+  # the runner's annotations (GitHub Actions) must reach this job's log; it wrote its own summary table
+  $nu_tests.stdout | lines | where {|l| $l starts-with "::" } | each {|l| print $l } | ignore
   assert-eq $nu_tests.exit_code 0 $"oauth, test runner, poll rules, config, syntax of every .nu file \(($nu_summary | str replace 'nu tests: ' '')\)"
 
-  print "workflows (node --test)"
+  section "workflows (node --test)"
   let tests = ($skill_dir | path join ../../../workflows/test | path expand)
   if (which node | is-empty) {
     print "  skip node not installed"
@@ -240,5 +260,14 @@ def main [] {
     assert-eq $out.exit_code 0 $"plan.js and subtask.js regression tests \(($summary)\)"
     assert-eq ($passed > 0) true $"the workflow tests ran \(($passed) passed\)"
   }
+  let counts = ($env.SELFTEST_COUNTS? | default [])
+  gha summary ([
+    $"### selftest: all ($counts | get checks | math sum) checks passed \(nu (version | get version), ($nu.os-info.name)\)"
+    ""
+    "| section | checks |"
+    "|---------|-------:|"
+    ...($counts | where checks > 0 | each {|c| $"| (gha cell $c.section) | ($c.checks) |" })
+    ""
+  ] | str join "\n")
   print "selftest: all passed"
 }
