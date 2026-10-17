@@ -6,11 +6,13 @@
 # the branch name (first "KEY-123" token, upper-cased), which is how the poll
 # routes events to the coordinator session named after the ticket.
 #
-# Row: {number url title branch base ticket state draft ci review mergeable
-#       autoMerge updatedAt mergedAt changed}
+# Row: {number url title branch base ticket state draft ci review requested
+#       mergeable autoMerge updatedAt mergedAt changed}
 #   state:   open | merged
 #   ci:      pass | fail | pending | none
 #   review:  APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | ""
+#   requested: logins (or team slugs) whose review is requested; empty on a
+#            non-draft PR = the owner just marked it ready, ask the coworker
 #   changed: updatedAt is after --since (new activity to look at)
 #
 # --parse-branch <name> only prints the ticket id for that branch name (used by selftest).
@@ -49,6 +51,7 @@ def to-row [pr, state: string, since: string] {
     draft: ($pr.isDraft? | default false)
     ci: (ci-state ($pr.statusCheckRollup? | default []))
     review: ($pr.reviewDecision? | default "")
+    requested: ($pr.reviewRequests? | default [] | each {|r| $r.login? | default ($r.slug? | default ($r.name? | default "")) } | where {|x| $x != "" })
     mergeable: ($pr.mergeable? | default "")
     autoMerge: (($pr.autoMergeRequest? | default null) != null)
     updatedAt: $updated
@@ -66,7 +69,7 @@ def main [repo_path?: string, --since: string = "", --limit: int = 100, --parse-
     error make { msg: "usage: pr-sweep.nu <repo-path> [--since <iso8601>]" }
   }
   cd $repo_path
-  let fields = "number,url,title,headRefName,baseRefName,isDraft,updatedAt,mergedAt,reviewDecision,mergeable,statusCheckRollup,autoMergeRequest"
+  let fields = "number,url,title,headRefName,baseRefName,isDraft,updatedAt,mergedAt,reviewDecision,reviewRequests,mergeable,statusCheckRollup,autoMergeRequest"
 
   let open = (
     do { ^gh pr list --author "@me" --state open --limit $limit --json $fields } | complete

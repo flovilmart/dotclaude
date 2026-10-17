@@ -1,7 +1,7 @@
 ---
 name: stack-pr
-description: "Stacked pull requests mechanics for one ticket — create the stack, add a branch per slice, submit drafts, mark ready, sync after merges or review fixes. Uses GitHub's native `gh stack` when installed, else manual stacked branches with `gh pr create --base`. Use when the user says \"stack this\", \"open stacked PRs\", \"sync the stack\", or from /ticket-workflow."
-argument-hint: "init <branch> | add <branch> | submit | ready <branch> | sync | view"
+description: "Stacked pull requests mechanics for one ticket — create the stack, add a branch per slice, submit drafts, sync after merges or review fixes. PRs stay drafts until the owner marks them ready (their validation). Uses GitHub's native `gh stack` when installed, else manual stacked branches with `gh pr create --base`. Use when the user says \"stack this\", \"open stacked PRs\", \"sync the stack\", or from /ticket-workflow."
+argument-hint: "init <branch> | add <branch> | submit | sync | view"
 allowed-tools: [Bash, Read, Grep]
 ---
 
@@ -30,7 +30,7 @@ A subtask that depends on an unmerged subtask is stacked on that subtask's branc
 - Stack base = Linear's `gitBranchName` (already checked out in the worktree); it is slice 1's branch.
 - Slice n branch = `<gitBranchName>-s<n>-<slug>` (config `slice_branch_pattern`). Keeping the issue key in every branch name lets Linear link every PR to the issue.
 - PR title = repo convention, else `<Ticket>: <slice goal>` and, for n > 1, suffix ` (<n>/<total>)`.
-- PR body = repo template if any; otherwise: what this slice does, how to verify, flag name and default, the slice's position in the stack, link to the Linear issue.
+- PR body = `~/.claude/skills/ticket-workflow/pr-body.md` (owner validation block + reviewer summary), inside the repo's PR template headings when it has one.
 
 ## gh stack mode
 
@@ -40,7 +40,8 @@ A subtask that depends on an unmerged subtask is stacked on that subtask's branc
 | add a dependent slice (run from the branch it depends on, the top of that stack) | `gh stack add <branch>` |
 | start a standalone slice | `git switch -c <branch> origin/<default>`; it is its own one-branch stack (`gh stack init <branch>` when you later stack on it) |
 | push + create/update draft PRs | `gh stack submit --auto` (drafts) |
-| mark a slice ready | `gh pr ready <branch>` |
+| mark a slice ready | the **owner** does this (it's their validation); never run `gh pr ready` yourself |
+| back to draft for re-validation | `gh pr ready <n> --undo` |
 | after trunk moved or a lower PR merged | `gh stack sync` (fetch, fast-forward trunk, cascade rebase, push, relink PRs) |
 | after review fixes on a lower slice | commit on that branch, then `gh stack rebase` (cascades upward) and `gh stack push` |
 | show | `gh stack view --short` |
@@ -55,7 +56,8 @@ Conflicts during `sync` / `rebase`: stop, delegate resolution to an `implementer
 | add slice n | `git switch -c <branch-n> <branch-n-1>` |
 | push | `git push -u origin <branch>` |
 | create PR | `gh pr create --draft --base <branch-n-1> --head <branch-n> --title "..." --body-file <tmp>` (slice 1: `--base <default branch>`) |
-| mark ready | `gh pr ready <branch>` |
+| mark ready | the owner, never the agent |
+| back to draft | `gh pr ready <n> --undo` |
 | sync after default branch moved | `git fetch origin`; rebase slice 1 on `origin/<default>`, then each slice on the previous (`git rebase --onto <new-prev> <old-prev> <branch>`); `git push --force-with-lease` each |
 | after a lower PR merges | retarget the next PR: `gh pr edit <branch-n+1> --base <default>`; then rebase the rest as above |
 
@@ -63,10 +65,10 @@ Force-pushes are allowed only on the stack's own branches, always `--force-with-
 
 ## Merging
 
-Humans merge, or GitHub auto-merge merges for them once the repo's branch protection is satisfied: `gh pr merge <n> --auto --squash` (method per repo docs). Enable it only on a PR that is approved and green, bottom of its stack first; never approve a PR yourself, never `--admin`. After a merge: `gh stack sync` (gh stack mode) or retarget and rebase (manual mode), then enable auto-merge on the next PR.
+Humans merge, or GitHub auto-merge merges for them once the repo's branch protection is satisfied: `gh pr merge <n> --auto --squash` (method per repo docs). Enable it only on a PR the owner validated (not draft) and a coworker approved, with CI green, bottom of its stack first; never approve a PR yourself, never `--admin`. After a merge: `gh stack sync` (gh stack mode) or retarget and rebase (manual mode), then enable auto-merge on the next PR.
 
 ## Always
 
 - Push and submit after every verified slice; do not batch the whole stack at the end. Early drafts give reviewers the shape of the change.
 - Record `branch → PR URL` for each slice in the ticket state file and attach the PR links to the Linear issue (`save_issue` with `links`), one per PR.
-- Before marking the last slice ready, run `sync`/`view` and confirm every PR's base is correct.
+- Before telling the owner the ticket is shipped, run `sync`/`view` and confirm every PR's base is correct.

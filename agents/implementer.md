@@ -53,7 +53,10 @@ Tests added/changed: <path> — <what each proves>
 Checks run: <command → pass/fail>
 Behaviour behind flag: <flag name | none>
 Deviations from plan: <none | list>
+Uncertain: <path:line — decision or assumption made without explicit guidance, and why | none>
 Needs human: <precise question | none>
 ```
+
+`Uncertain` goes straight into the owner's validation packet as "check first". List every judgement call a careful reviewer would want to double-check. Honest uncertainty here saves the owner from finding it the hard way.
 
 Stop and report `BLOCKED` with a precise question rather than guessing when a decision would change the public API, the data model, or the user-visible behaviour.

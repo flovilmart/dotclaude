@@ -1,7 +1,7 @@
 ---
 name: agent-workflow
-description: "Control plane for the Linear → worktree → stacked-PR agent workflow. Use when the user says \"start the agent workflow\", \"poll linear\", \"workflow status\", \"stop polling\", \"dispatch ENG-123\", or answers clarification questions for a ticket (\"for ENG-123, the answer is ...\"). Subcommands: start | status | stop | dispatch <id> | clarify <id> | report [since]."
-argument-hint: "start | status | stop | dispatch <ticket-id> | clarify <ticket-id> | report [since]"
+description: "Control plane for the Linear → worktree → stacked-PR agent workflow. Use when the user says \"start the agent workflow\", \"poll linear\", \"workflow status\", \"what's waiting on me\", \"stop polling\", \"dispatch ENG-123\", answers clarification questions for a ticket (\"for ENG-123, the answer is ...\"), approves or comments on a plan (\"approve ENG-123\"), or wants to try a slice (\"try ENG-123 s2\"). Subcommands: start | status | stop | dispatch <id> | clarify <id> | approve <id> [feedback] | try <id> [s<n>] | report [since]."
+argument-hint: "start | status | stop | dispatch <ticket-id> | clarify <ticket-id> | approve <ticket-id> [feedback] | try <ticket-id> [s<n>] | report [since]"
 allowed-tools: [Bash, Read, Write, Edit, Glob, ListAgents, SendMessage, CronCreate, CronList, CronDelete, mcp__plugin_linear_linear__list_teams, mcp__plugin_linear_linear__list_issue_statuses, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_comments, mcp__plugin_linear_linear__save_issue, mcp__plugin_linear_linear__save_comment, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_cycles]
 ---
 
@@ -40,6 +40,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
 - **Group 1 — Linear**: team key (list teams with `list_teams` and offer them); confirm state names with `list_issue_statuses`; label to use while waiting for clarifications. Tell the user that only issues assigned to them are ever polled.
 - **Group 2 — Repos**: default checkout path, plus optional `project:` / `label:` → path rows. Paths use `~/src/<org>/<repo>`.
 - **Group 3 — Coordinators**: permission mode (`auto` recommended; `acceptEdits` if auto mode is not available), model override, max parallel coordinators, poll interval.
+- **Group 4 — Human gates**: plan approval (`human` recommended), and the coworkers to request once a PR is validated when CODEOWNERS names nobody. Explain the flow in two lines: you validate a draft PR by marking it Ready for review, which requests the coworker; auto-merge only after the coworker approves.
 
 Write the answers into `config.local.md` using the template's structure; cache `team_id` from `list_teams`.
 
@@ -47,12 +48,23 @@ Write the answers into `config.local.md` using the template's structure; cache `
 
 ## `status`
 
-Run in parallel and print one compact table plus one line per item:
+Run in parallel. Print **Waiting on you** first, then the rest as one compact table plus one line per item.
+
+**Waiting on you**, oldest first, each line with its link and the one action expected:
+
+- open **draft** PRs from `pr-sweep.nu` that carry a ticket → `validate: <PR url>` (coordinators leave only finished slices as drafts, so every draft is waiting for your validation). Add the coordinator's `ready to validate` / `re-validate <criteria>` note when you have it.
+- issues with `needs_plan_label` → `approve or comment on the plan: <issue url>`.
+- issues with `needs_spec_label` → `answer clarifications: <issue url>`.
+- coordinators whose state file says `blocked`, or whose `waitingFor` is a permission prompt → `answer <ticket>: claude attach <ticket>`.
+
+Then **Waiting on coworkers**: non-draft PRs with `requested` reviewers and no approval, with their age (so you know whom to nudge).
+
+Then:
 
 - `nu ~/.claude/skills/linear-poll/scripts/sessions.nu` → coordinators (name, state, status, waitingFor). A `waitingFor` of `permission prompt` means the user must `claude attach <ticket>` to answer it.
 - `CronList` → whether the poll loop is armed.
 - `nu ~/.claude/skills/linear-poll/scripts/pr-sweep.nu <repo>` per configured repo → open PRs by ticket with `ci` / `review` / `draft` / `autoMerge` columns.
-- `list_issues` with `assignee: "me"` for the current cycle and `label: <needs_spec_label>` → tickets waiting on the human.
+- `list_issues` with `assignee: "me"` and `label: <needs_spec_label>`, then `label: <needs_plan_label>` → tickets waiting on the human.
 - For each coordinator: the first lines of `~/.claude/agent-workflow/state/<ticket>.md` (phase and slice table), if present.
 
 ---
@@ -91,16 +103,34 @@ Use when the user has answered clarification questions for a ticket here in this
 
 ---
 
+## `approve <ticket-id> [feedback]`
+
+Use when the user approves or comments on a plan here ("approve ENG-123", "ENG-123 plan: merge slices 2 and 3").
+
+1. `get_issue` + `list_comments`; find the latest comment starting with `comment_marker` and containing `Plan for approval`. None → say there is no plan waiting.
+2. Post the user's reply as a comment: `approve` when they approved, else their feedback verbatim. Don't use the `comment_marker` prefix: this is the human's answer, not the workflow's.
+3. Wake the coordinator: `nu .../resume.nu <ticket> "Reply on the plan for <ticket>: approve or revise, and continue /ticket-workflow"`. `running <id>` → `SendMessage` the same text to the session named `<ticket>`; `none` → dispatch it.
+
+---
+
+## `try <ticket-id> [s<n>]`
+
+Use when the user wants to run a slice before validating it. `SendMessage` to the session named `<ticket>`: `try s<n>` (default: the oldest slice awaiting validation in its state file). Relay its reply (URL or commands). If the session isn't running, give the "Try it" commands from the PR body instead: `gh pr checkout <n>` in the user's own checkout, plus the run command.
+
+---
+
 ## `report [since]`
 
 Run `nu ~/.claude/skills/agent-workflow/scripts/report.nu` (add `--since <ISO 8601>` when the user gives a period, e.g. "since Monday" → that date). It reads `~/.claude/agent-workflow/log.jsonl`, written by the `SubagentStart` / `SubagentStop` / `SessionEnd` hooks, and prints per worktree and per agent: runs, average and total minutes. Interpret for the user in three or four lines: tickets with many `implementer` + `code-challenger` runs had review churn; many `verifier` runs mean the fast checks are not catching what CI catches; long `repo-scout` runs mean `AGENTS.md` is thin. Add cycle time from GitHub when asked: `gh pr list --state merged --author @me --json createdAt,mergedAt,headRefName` in the repo.
 
 ## Messages from coordinators
 
-Coordinators message this session (cross-session messaging) in four cases. Handle each in one short turn, then stop:
+Coordinators message this session (cross-session messaging) in these cases. Handle each in one short turn, then stop:
 
 - **Clarification needed** (`<ticket>: needs clarification`): show the user the numbered questions with the proposed defaults, and say "answer here or in Linear; I'll write the spec into the ticket". When they answer, run `clarify <ticket>`.
-- **Ready for review** (`<ticket>: ready`): show the PR list and say the issue is now in `<review_state>`.
+- **Plan ready** (`<ticket>: plan ready for approval`): show the slice table and say "reply `approve` here or in Linear, or tell me what to change". When they answer, run `approve <ticket> [feedback]`.
+- **Ready to validate** (`<ticket> s<n>: ready to validate`, `fixes pushed`, or `re-validate <criteria>`): show the PR link and the "Check first" bullets, and remind them that marking it Ready for review is their sign-off and requests the coworker. Offer `try <ticket> s<n>`.
+- **All slices shipped** (`<ticket>: all slices shipped`): show the PR list, split into `to validate` and `in review`.
 - **Blocked** (`<ticket>: blocked`): relay the exact question. If the user answers, forward the answer with `SendMessage` to the session named `<ticket>` (it is running; it just asked).
 - **Stopped / failed**: suggest `claude logs <ticket>` and `claude attach <ticket>`.
 

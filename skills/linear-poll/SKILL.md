@@ -1,6 +1,6 @@
 ---
 name: linear-poll
-description: "One tick of the Linear poll loop. Finds Todo issues assigned to me in the current cycle, dispatches a background coordinator session (own worktree) for each new one, wakes coordinators whose clarification questions were answered, relays pull request events (CI, reviews, merges) to coordinators, and restarts coordinators that died mid-ticket. Run on a schedule with `/loop 10m /linear-poll` or via `/agent-workflow start`; can also be run once by hand."
+description: "One tick of the Linear poll loop. Finds Todo issues assigned to me in the current cycle, dispatches a background coordinator session (own worktree) for each new one, wakes coordinators whose clarification questions or plan approvals were answered, relays pull request events (CI, reviews, merges) to coordinators, and restarts coordinators that died mid-ticket. Run on a schedule with `/loop 10m /linear-poll` or via `/agent-workflow start`; can also be run once by hand."
 argument-hint: "[--dry-run]"
 allowed-tools: [Bash, Read, Write, Agent, ListAgents, SendMessage, mcp__plugin_linear_linear__list_issues, mcp__plugin_linear_linear__list_cycles, mcp__plugin_linear_linear__get_issue, mcp__plugin_linear_linear__list_comments]
 ---
@@ -11,7 +11,7 @@ This runs between the user's turns in the main (dispatcher) session. It must be 
 
 Config: `~/.claude/skills/agent-workflow/config.local.md`. If it does not exist, print one line telling the user to run `/agent-workflow start`, and stop.
 
-`--dry-run` ($ARGUMENTS contains it): do everything except steps 5 and 6's side effects; print what would happen.
+`--dry-run` ($ARGUMENTS contains it): do everything except the side effects of steps 5 to 9; print what would happen.
 
 ## 1. Who am I
 
@@ -60,14 +60,21 @@ For each **resume** candidate: `nu ~/.claude/skills/linear-poll/scripts/resume.n
 
 Do not claim the issue in Linear here: the coordinator claims it (state → `in_progress_state`, assignment, start comment) as its first action. That keeps a failed dispatch from leaving a ghost "In Progress".
 
-## 6. Clarifications answered
+## 6. Human answers (clarifications and plan approvals)
 
-`list_issues` with `assignee: "me"`, `team`, `cycle`, `label: <needs_spec_label>`, `fields: [id, updatedAt]`. For each:
+Two waits, same mechanics:
+
+| label | question comment contains | wake message |
+|-------|---------------------------|--------------|
+| `needs_spec_label` | `Clarifications needed` | `Answers posted on <ID>: re-run the spec gate and continue /ticket-workflow` |
+| `needs_plan_label` | `Plan for approval` | `Reply on the plan for <ID>: approve or revise, and continue /ticket-workflow` |
+
+For each label, `list_issues` with `assignee: "me"`, `team`, `label: <label>`, `fields: [id, updatedAt]` (no cycle filter for the plan label: a claimed ticket can outlive its cycle). For each issue:
 
 1. `list_comments` for the issue, ordered by `createdAt`.
-2. Find the newest comment whose body starts with `comment_marker` and contains `Clarifications needed` (the questions), with its `createdAt`.
-3. An answer exists if either: a later comment that does **not** start with `comment_marker`, or the issue's `updatedAt` is later than the questions and `get_issue` shows a `## Spec` section in the description.
-4. If an answer exists: run `nu .../resume.nu <ID> "Answers posted on <ID>: re-run the spec gate and continue /ticket-workflow"`. If it prints `running <id>`, send that text with `SendMessage` to the session named `<ID>` instead. If `none`, dispatch it as in step 5.
+2. Find the newest comment whose body starts with `comment_marker` and contains the question text from the table, with its `createdAt`.
+3. An answer exists if either: a later comment that does **not** start with `comment_marker`, or (spec only) the issue's `updatedAt` is later than the questions and `get_issue` shows a `## Spec` section in the description.
+4. If an answer exists: run `nu .../resume.nu <ID> "<wake message>"`. If it prints `running <id>`, send that text with `SendMessage` to the session named `<ID>` instead. If `none`, dispatch it as in step 5.
 
 Repeated nudges on later ticks are harmless (identical repeats are dropped by the receiver), but stop after the coordinator removes the label.
 
@@ -82,6 +89,7 @@ Last tick time: keep it in `~/.claude/agent-workflow/last-tick.local` (write the
 - `ci: fail` → `PR #N (<branch>): CI failing`
 - `review: CHANGES_REQUESTED` → `PR #N: changes requested`
 - `changed: true` and state open → `PR #N: new activity since <since>, check comments`
+- `draft: false`, state open, `requested` empty, `review` not `APPROVED` and not `CHANGES_REQUESTED` → `PR #N: out of draft, nobody requested (validated by the owner, or a comment-only review)`
 - `review: APPROVED`, `ci: pass`, `draft: false`, `autoMerge: false` → `PR #N: approved and green, enable auto-merge if config allows`
 - `state: merged` → `PR #N (<branch>): merged at <mergedAt>, sync the stack and close its sub-issue`
 
@@ -89,7 +97,7 @@ Deliver with `resume.nu <ticket> "<message>"`; on `running <id>` use `SendMessag
 
 ## 8. Stale coordinators
 
-`list_issues` with `assignee: "me"`, `team`, `cycle`, `state: <in_progress_state>`, `fields: [id, labels]`. For each issue without `needs_spec_label` and without `stalled_label` whose `sessions.nu <ID>` shows **no session at all** (not even an exited one; an exited one is handled by `resume.nu`):
+`list_issues` with `assignee: "me"`, `team`, `cycle`, `state: <in_progress_state>`, `fields: [id, labels]`. For each issue without `needs_spec_label`, `needs_plan_label` or `stalled_label` whose `sessions.nu <ID>` shows **no session at all** (not even an exited one; an exited one is handled by `resume.nu`):
 
 1. `list_comments` and count comments starting with `<comment_marker> · <ID> · redispatched`.
 2. Fewer than `max_redispatch` → dispatch it as in step 5 and post `<comment_marker> · <ID> · redispatched (<n+1>/<max_redispatch>)`.

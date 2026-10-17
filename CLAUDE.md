@@ -94,6 +94,8 @@ claude attach ENG-123             # talk to a coordinator; ← to detach
 - Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
 - Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
 - Slices become Linear sub-issues, each with its own PR, picked up by priority; dependent ones are stacked via `gh stack` (`skills/stack-pr`); feature flags per the repo's `AGENTS.md`.
-- Gates before a PR leaves draft: `verifier`, `security-reviewer`, `smoke-tester`. The poll relays PR events (CI, reviews, merges); auto-merge only after human approval via branch protection; sub-issues go to Done on merge.
+- Human gates: I approve the slice plan (`plan_approval`), I validate each draft PR (validation packet from `skills/ticket-workflow/pr-body.md`) by marking it ready, then a coworker is requested and approves. Agents never mark ready or approve.
+- Gates before a draft reaches me: `verifier` (incl. slice size), `security-reviewer`, `smoke-tester`; every commit code-reviewed. The poll relays PR events (CI, reviews, validation, merges); auto-merge only after the coworker's approval via branch protection; sub-issues go to Done on merge.
+- `workflows/test/` tests the saved workflows offline (`node --test`), run by `selftest.nu`.
 - Hooks log every subagent run to `~/.claude/agent-workflow/log.jsonl`; `/agent-workflow report` summarises it; `nu ~/.claude/skills/agent-workflow/scripts/tui.nu` is a live terminal dashboard over it. `selftest.nu` tests the scripts offline.
 - Config: `skills/agent-workflow/config.local.md` (gitignored; template `config.example.md`).

@@ -54,5 +54,6 @@ Failures (verbatim, trimmed):
 <...>
 
 Flaky: <test name: failed then passed | none>
+Changed lines: <added + removed from git diff --numstat <base>...HEAD, excluding tests, lockfiles and generated files>
 Tree after run: clean | dirty: <files>
 ```

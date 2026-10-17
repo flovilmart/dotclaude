@@ -13,6 +13,7 @@ Copy this file to `~/.claude/skills/agent-workflow/config.local.md` (gitignored)
 - done_state: Done                                   # set on a sub-issue when its PR merges, on the ticket when all are merged
 - stalled_label: agent-stalled                       # added after max_redispatch automatic restarts of a dead coordinator
 - needs_spec_label: needs-spec                       # added while waiting for clarifications
+- needs_plan_label: needs-plan-approval              # added while the slice plan waits for your approval
 # Only issues assigned to the connected Linear user are ever polled (never the whole team).
 - create_subissues: true                             # one Linear sub-issue per slice, each with its own PR; priority is picked up from Linear
 
@@ -37,8 +38,15 @@ Match on Linear `project:<name>`, `label:<name>`, or `default`.
 - interval: 10m                  # passed to the cron created by /agent-workflow start
 - pre_spec_next_cycle: false     # also run the spec gate (questions only, no worktree) on my Todo issues in the NEXT cycle
 
+## Human gates
+Two people see every change: you validate the feature and review it for mistakes, then a coworker approves the PR.
+- plan_approval: human           # human (you approve the slice plan before any code) | auto (implementation starts after the design challenge)
+- reviewers:                     # coworker GitHub logins requested once you validate, when CODEOWNERS names nobody; e.g. alice, bob
+# You validate a PR by marking it Ready for review (GitHub does not let you approve your own PR; the agent opens PRs as you).
+
 ## Pull requests
-- auto_merge: true               # enable GitHub auto-merge on a PR once it is approved and green; merges only when branch protection (required human reviews) is satisfied
+- auto_merge: true               # enable GitHub auto-merge once the coworker approved and CI is green; merges only when branch protection (required human reviews) is satisfied
+- max_slice_lines: 800           # changed lines per slice (excluding tests and generated code) above which the subtask stops and asks to split
 - merge_method: squash           # squash | merge | rebase, unless the repo's AGENTS.md says otherwise
 - smoke_test: auto               # auto (slices the planner marks smoke-worthy) | always | never
 - max_fix_rounds: 3              # fix rounds per gate (review, verify, security, smoke) inside the subtask workflow before a human is asked

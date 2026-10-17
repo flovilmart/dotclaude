@@ -53,8 +53,13 @@ SHOULD:
 NIT:
 - ...
 
+Coverage:
+- <acceptance criterion> → <test path:line | none>
 Tests: <adequate | gaps: ...>
 Scope: <clean | creep: ...>
 ```
+
+When the brief names fix commits only, review those commits (`git show <sha>`), using the full diff only for context.
+The coverage list goes into the owner's validation packet. A criterion with `none` is a BLOCKING finding unless the slice says it's covered by a later slice.
 
 APPROVE means no BLOCKING items. Keep it under 40 lines; findings beat prose.
