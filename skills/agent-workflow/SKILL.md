@@ -30,7 +30,7 @@ Subcommand = `$0`. Ticket id = `$1` when present.
    ```
    nu ~/.claude/skills/linear-poll/scripts/selftest.nu
    ```
-   A failure here means the poll would misbehave; stop and show the failing check.
+   It first checks that `nu` is at least the version the scripts are tested on (`MIN_NU` in `selftest.nu`). A failure here means the poll would misbehave; stop and show the failing check (for an old nu: `brew upgrade nushell`).
 3. **Session name.** Call `ListAgents`; the first line is this session's name. If it differs from `dispatcher_name` in the config, update the config to the real name (coordinators message you by it) and tell the user they can run `/rename <name>` to make it stable.
 4. **Poll loop.** Call `CronList`; if no task already runs `/linear-poll`, call `CronCreate` with the configured interval and the prompt `/linear-poll`. Report the cron id. The loop fires between turns, so the user can keep working in this session.
 5. Finish with: the cron id, how to stop (`/agent-workflow stop`), and how to watch coordinators (`claude agents`, or `claude attach <ticket-id>`).

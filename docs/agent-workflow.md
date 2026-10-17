@@ -123,8 +123,9 @@ assumptions in the spec, and continues.
   `nu ~/.claude/skills/agent-workflow/scripts/tui.nu` (overview, agents, worktrees, timeline, recent and
   running agents; `w` cycles the time window, `q` quits). Token cost is not in the hook payload; use
   `/cost` in a coordinator or your usage dashboard for that.
-- **Tests.** `/agent-workflow start` runs `selftest.nu` once (temp repo, no network). Run it after any
-  change to the scripts. The pipeline itself is best dry-run on a sandbox repo with
+- **Tests.** `/agent-workflow start` runs `selftest.nu` once (temp repo, no network). It fails first on a
+  nu older than `MIN_NU`, since nushell still makes breaking changes between releases. Run it after any
+  change to the scripts and after upgrading nushell. The pipeline itself is best dry-run on a sandbox repo with
   `/agent-workflow dispatch <demo ticket>`.
 - **Early spec gate** (`pre_spec_next_cycle: true`): the poll also runs the spec-challenger on your Todo
   issues in the next cycle, so clarification questions reach you before the cycle starts.

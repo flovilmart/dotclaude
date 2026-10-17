@@ -6,6 +6,19 @@
 # .worktreeinclude copy, ticket holds) and pr-sweep.nu's branch → ticket parsing,
 # then runs the saved workflows' regression tests (workflows/test) when node is installed.
 # No network, no Linear, no claude. Prints ok/FAIL per check; exit code 1 on failure.
+#
+# Fails first when nu is older than MIN_NU: nushell still renames flags and
+# commands between releases, and these scripts are tested on MIN_NU and later.
+
+const MIN_NU = [0 106 0]
+
+# true when the running nu is at least `min` ([major minor patch])
+def nu-at-least [min: list<int>] {
+  let v = (version)
+  let cur = [$v.major $v.minor $v.patch]
+  let diff = ($cur | zip $min | each {|p| $p.0 - $p.1 } | where {|d| $d != 0 } | first 1)
+  ($diff | is-empty) or ($diff.0 > 0)
+}
 
 def assert-eq [actual, expected, label: string] {
   if $actual == $expected {
@@ -28,6 +41,14 @@ def main [] {
   let src = $"($tmp)/src"
   let origin = $"($tmp)/origin.git"
   let main = $"($tmp)/demo"
+
+  print "nu"
+  let min = ($MIN_NU | str join '.')
+  if not (nu-at-least $MIN_NU) {
+    print $"  FAIL nu (version | get version) is older than ($min): brew upgrade nushell"
+    error make { msg: $"selftest failed: nu older than ($min)" }
+  }
+  print $"  ok   nu (version | get version) >= ($min)"
 
   print "setup"
   ^git init --quiet --initial-branch=main $src
