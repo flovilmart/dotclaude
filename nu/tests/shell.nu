@@ -32,13 +32,13 @@ def "linear status says the key is readable without printing it" [] {
 @test
 def "linear status says when 1Password has no key" [] {
   let s = (with-env {LINEAR_API_KEY: "", FAKE_OP_KEY: "", PATH: (fake-op)} { linear status --config (config-with "") })
-  assert equal $s {source: "1Password", ref: "op://Private/Linear/credential", readable: false}
+  assert equal $s {source: "1Password", ref: "op://Private/Linear API Key/credential", readable: false}
 }
 
 @test
 def "linear status prefers LINEAR_API_KEY" [] {
   let s = (with-env {LINEAR_API_KEY: "lin_api_env"} { linear status --config (config-with "") })
-  assert equal $s {source: "LINEAR_API_KEY", ref: "op://Private/Linear/credential", readable: true}
+  assert equal $s {source: "LINEAR_API_KEY", ref: "op://Private/Linear API Key/credential", readable: true}
 }
 
 @test

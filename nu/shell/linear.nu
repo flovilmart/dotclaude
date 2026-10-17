@@ -6,7 +6,7 @@
 #   linear issues         your open issues in the configured team, by priority
 #
 # Config: ~/.claude/skills/agent-workflow/config.local.yaml (team_key, linear_api_key_ref, default
-# op://Private/Linear/credential), the same file the watcher reads. Loaded at shell start by autoload.nu.
+# op://Private/Linear API Key/credential), the same file the watcher reads. Loaded at shell start by autoload.nu.
 
 use ../../skills/linear-poll/scripts/config.nu [load-config]
 use ../../skills/linear-poll/scripts/linear.nu [key-ref store-key auth my-issues whoami]
@@ -30,7 +30,7 @@ export def login [--config: string = ""] {
   print $"($stored.item) ($ref): the key of ($me.name) <($me.email)>"
 }
 
-# Where the agent workflow reads the Linear API key, and whether it can (never prints the key)
+# Where the agent workflow reads the Linear API Key, and whether it can (never prints the key)
 export def status [--config: string = ""] {
   let ref = (key-ref (cfg $config))
   if ($env.LINEAR_API_KEY? | default "") != "" { return {source: "LINEAR_API_KEY", ref: $ref, readable: true} }

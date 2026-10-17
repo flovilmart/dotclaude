@@ -5,12 +5,12 @@
 #   linear my-issues $auth $cfg.team_key
 #
 # Linear access is a personal API key kept in 1Password at linear_api_key_ref (default
-# op://Private/Linear/credential); `linear login` stores it there. $env.LINEAR_API_KEY overrides
+# op://Private/Linear API Key/credential); `linear login` stores it there. $env.LINEAR_API_KEY overrides
 # it (a container or CI without `op`). The key goes in the Authorization header as is.
 # Limits: 2,500 requests/hour per API key; the watcher makes 1-2 per cycle.
 
 const API = "https://api.linear.app/graphql"
-export const DEFAULT_KEY_REF = "op://Private/Linear/credential"
+export const DEFAULT_KEY_REF = "op://Private/Linear API Key/credential"
 
 # Where the key lives in 1Password
 export def key-ref [cfg] { $cfg.linear_api_key_ref? | default $DEFAULT_KEY_REF }
@@ -34,14 +34,25 @@ export def api-key [ref: string] {
   $r.stdout | str trim
 }
 
-# Store a key at an op:// reference: set the field on the item if it exists, else create an
-# API Credential item. The key reaches `op` as an assignment argument (as `op` expects): visible
-# to this user's processes for an instant, never written to disk.
+# Store a key at an op:// reference: set the field on its API Credential item, or create that
+# item. Any other kind of item (your Linear login, say) is left alone. The key reaches `op` as an
+# assignment argument (as `op` expects): visible to this user's processes for an instant, never on disk.
 export def store-key [ref: string, key: string] {
   let r = (parse-ref $ref)
+  let found = (do { ^op item get $r.item --vault $r.vault --format json } | complete)
+  let exists = ($found.exit_code == 0)
+  if not $exists and not ($found.stderr =~ "isn't an item") {
+    error make { msg: $"op couldn't look up ($ref): ($found.stderr | str trim)" }
+  }
+  if $exists {
+    let category = ($found.stdout | from json | get category? | default "unknown")
+    if $category != "API_CREDENTIAL" {
+      let kind = ($category | str downcase | str replace --all "_" " ")
+      error make { msg: $"'($r.item)' in ($r.vault) is a ($kind) item, not an API Credential; set linear_api_key_ref to an item of its own, e.g. op://($r.vault)/Linear API Key/credential" }
+    }
+  }
   # an API Credential's own `credential` field is already concealed; any other field is made a password field
   let assignment = if $r.field == "credential" { $"credential=($key)" } else { $"($r.field)[password]=($key)" }
-  let exists = ((do { ^op item get $r.item --vault $r.vault --format json } | complete).exit_code == 0)
   let out = if $exists {
     do { ^op item edit $r.item --vault $r.vault $assignment } | complete
   } else {

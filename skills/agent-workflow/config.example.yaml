@@ -41,7 +41,7 @@ dispatcher_name: dispatcher  # name of the main session (start it with `claude -
 # ── Poll ────────────────────────────────────────────────────────────────────
 # The watcher (skills/linear-poll/scripts/watch.nu) polls Linear and GitHub in nushell and wakes
 # the dispatcher only when it's needed. Linear access: a personal API key kept in 1Password.
-linear_api_key_ref: op://Private/Linear/credential   # where the key lives (op://<vault>/<item>/<field>): `linear login` stores it there, the scripts read it with `op read`; never the key itself
+linear_api_key_ref: op://Private/Linear API Key/credential   # where the key lives (op://<vault>/<item>/<field>): `linear login` stores it there, the scripts read it with `op read`; never the key itself
 watch: monitor               # monitor (watch.nu streams events to the dispatcher; quiet cycles cost no tokens) | cron (poll_cron runs one cycle per tick)
 watch_interval: 60           # seconds between Linear checks; PRs every second check
 watch_hours: 8-19            # local hours the watcher acts (8:00-19:59)
