@@ -4,7 +4,8 @@
 # Builds a throwaway repo with a local "origin", then exercises
 # ensure-worktree.nu (create, reuse, free-after-merge, worktree path as input,
 # .worktreeinclude copy, ticket holds), profile-key.nu, pr-sweep.nu's branch → ticket parsing,
-# config.nu, the poll rules (rules.nu) and watch.nu end to end with a fake claude,
+# watch.nu and follow.nu end to end with a fake claude; then the @test files (nu/run-tests.nu:
+# oauth, the test runner, the poll rules, config) and the saved workflows' tests,
 # then runs the saved workflows' regression tests (workflows/test) when node is installed.
 # No network, no Linear, no claude. Prints ok/FAIL per check; exit code 1 on failure.
 #
@@ -21,9 +22,6 @@ def nu-at-least [min: list<int>] {
   ($diff | is-empty) or ($diff.0 > 0)
 }
 
-use config.nu *
-use rules.nu *
-use linear.nu
 
 def assert-eq [actual, expected, label: string] {
   if $actual == $expected {
@@ -50,7 +48,6 @@ def pr [n: int, ticket: string, extra: record = {}] {
   } | merge $extra
 }
 
-def types [actions: list] { $actions | each {|a| $"($a.type) ($a.ticket)" } }
 
 def git-commit [repo: string, msg: string] {
   ^git -C $repo -c user.name=selftest -c user.email=selftest@example.com commit --quiet --allow-empty -m $msg
@@ -170,70 +167,9 @@ def main [] {
   assert-eq (^nu $sweep --parse-branch "florent/eng-123-add-thing-s2-schema" | str trim) "ENG-123" "ticket parsed from Linear-style branch"
   assert-eq (^nu $sweep --parse-branch "main" | str trim) "" "no ticket in main"
 
-  print "config.nu"
-  let cfg = (parse-config (open --raw $"($skill_dir)/../../agent-workflow/config.example.md"))
-  assert-eq $cfg.max_parallel 3 "integers are parsed"
-  assert-eq $cfg.auto_merge true "booleans are parsed"
-  assert-eq $cfg.comment_marker "🤖 agent-workflow" "quotes are stripped"
-  assert-eq ($cfg.reviewers? | default "absent") "absent" "an empty value with a comment is absent"
-  assert-eq (resolve-repo $cfg.repos "Demo App" []) ("~/src/flovilmart/demo-app" | path expand) "repo by project"
-  assert-eq (resolve-repo $cfg.repos null [infra]) ("~/src/flovilmart/infra" | path expand) "repo by label"
-  assert-eq (resolve-repo $cfg.repos "Other" []) ("~/src/flovilmart/dotclaude" | path expand) "default repo"
-  let ocfg = ($cfg | upsert linear_oauth_client_id "client-1")
-  assert-eq (linear uses-oauth $cfg) false "API key auth when no OAuth client is configured"
-  assert-eq (linear provider $ocfg | select client_id scope_sep port extra) {client_id: "client-1", scope_sep: ",", port: 8765, extra: {actor: "user"}} "Linear OAuth provider: public client on the loopback port, acting as the user"
-
-  print "rules.nu"
-  let now = ("2026-10-17T12:00:00Z" | into datetime)
-  let busy = [{name: "DEMO-9", pid: 9, state: "working"}]
-  let new = (decide $cfg $now [
-    (issue DEMO-1 {priority: 3}) (issue DEMO-2 {priority: 1}) (issue DEMO-3 {priority: 0})
-    (issue DEMO-5 {parent: "DEMO-9"}) (issue DEMO-6 {labels: [needs-spec]}) (issue DEMO-7 {cycle: {isActive: false, isNext: true}})
-  ] $busy [] {})
-  assert-eq (types $new.actions) ["dispatch DEMO-2" "dispatch DEMO-1" "queued DEMO-3"] "new tickets by priority within capacity; none-priority last; coordinator sub-issues, needs-spec and next cycle skipped"
-  let exited = (decide $cfg $now [(issue DEMO-4)] [{name: "DEMO-4", pid: null, state: "done"}] [] {})
-  assert-eq ($exited.actions.0 | select type msg) {type: wake, msg: "/ticket-workflow DEMO-4 dispatcher"} "a stopped coordinator of a Todo ticket is restarted"
-  let cool = (decide $cfg $now [(issue DEMO-1)] [] [] {cooldown: {"DEMO-1": "2026-10-17T12:05:00Z"}})
-  assert-eq $cool.actions [] "a ticket in cooldown gets no action"
-  let later = (decide $cfg ($now + 10min) [(issue DEMO-1)] [] [] $cool.state)
-  assert-eq (types $later.actions) ["dispatch DEMO-1"] "after the cooldown the ticket is acted on again"
-  assert-eq $later.state.cooldown {} "and the ended cooldown is dropped"
-
+  print "watch.nu (fake claude, fixtures)"
   let q = {body: "🤖 agent-workflow · DEMO-6 · Plan for approval\n...", createdAt: "2026-10-02T00:00:00.000Z"}
   let waiting = (issue DEMO-6 {state: "In Progress", labels: [needs-plan-approval]})
-  let live6 = [{name: "DEMO-6", pid: 6, state: "idle"}]
-  assert-eq (comment-targets $cfg [$waiting (issue DEMO-1)] $live6 {}) ["DEMO-6"] "comments are fetched only where the rules need them"
-  let unanswered = (decide $cfg $now [($waiting | upsert comments [$q])] $live6 [] {})
-  assert-eq $unanswered.actions [] "an unanswered plan wakes nobody"
-  let answered = ($waiting | upsert comments [$q {body: "approve", createdAt: "2026-10-02T01:00:00.000Z"}])
-  let a1 = (decide $cfg $now [$answered] $live6 [] {})
-  assert-eq ($a1.actions.0.msg) "Reply on the plan for DEMO-6: approve or revise, and continue /ticket-workflow" "an answered plan wakes its coordinator"
-  assert-eq (decide $cfg $now [$answered] $live6 [] $a1.state | get actions) [] "and only once"
-  let spec_q = {body: "🤖 agent-workflow · DEMO-8 · Clarifications needed\n1. ?", createdAt: "2026-10-02T00:00:00.000Z"}
-  let edited = (issue DEMO-8 {state: "In Progress", labels: [needs-spec], hasSpec: true, updatedAt: "2026-10-03T00:00:00.000Z", comments: [$spec_q]})
-  assert-eq (decide $cfg $now [$edited] [{name: "DEMO-8", pid: 8, state: "idle"}] [] {} | get actions | types $in) ["wake DEMO-8"] "a ## Spec edited after the questions counts as an answer"
-
-  let p1 = (decide $cfg $now [] $live6 [(pr 7 DEMO-6 {ci: "fail"}) (pr 8 "") (pr 9 DEMO-99 {ci: "fail"})] {})
-  assert-eq ($p1.actions | select type ticket msg) [{type: wake, ticket: "DEMO-6", msg: "PR #7 (f/demo-6-s1): CI failing"}] "PR events only for tickets with a coordinator"
-  let p2 = (decide $cfg $now [] $live6 [(pr 7 DEMO-6 {ci: "fail", updatedAt: "t2"})] $p1.state)
-  assert-eq $p2.actions.0.msg "PR #7: new activity, check comments" "the same failure is not repeated; a change without a new condition is activity"
-  let p3 = (decide $cfg $now [] $live6 [(pr 7 DEMO-6 {ci: "pass", requested: [], review: "REVIEW_REQUIRED", updatedAt: "t3"})] $p2.state)
-  assert-eq $p3.actions.0.msg "PR #7: out of draft, nobody requested (validated by the owner, or a comment-only review)" "owner validation is reported"
-  let held = (decide $cfg $now [] $live6 [(pr 7 DEMO-6 {state: "merged", mergedAt: "m"})] ($p3.state | upsert cooldown {"DEMO-6": "2026-10-17T12:05:00Z"}))
-  assert-eq ($held.actions | length) 0 "PR events wait while the ticket is in cooldown"
-  assert-eq ($held.state.prs | get "https://gh/pr/7" | get conds) [out-of-draft] "and stay unseen until then"
-
-  let gone = {|n| issue DEMO-10 {state: "In Progress", comments: (1..$n | each {|i| {body: $"🤖 agent-workflow · DEMO-10 · redispatched \(($i)/3\)", createdAt: "2026-10-02T00:00:00.000Z"} })} }
-  assert-eq (decide $cfg $now [(do $gone 1)] [] [] {} | get actions.0 | select type n) {type: redispatch, n: 2} "a dead coordinator is redispatched, counted from Linear comments"
-  assert-eq (decide $cfg $now [(do $gone 3)] [] [] {} | get actions.0.type) "stall" "after max_redispatch it stalls"
-
-  let gcfg = ($cfg | upsert pre_spec_next_cycle true)
-  let next = {|id| issue $id {cycle: {isActive: false, isNext: true}, comments: []} }
-  let g1 = (decide $gcfg $now [(do $next DEMO-11) (do $next DEMO-12) (do $next DEMO-13)] [] [] {})
-  assert-eq (types $g1.actions) ["spec-gate DEMO-11" "spec-gate DEMO-12"] "early spec gate, at most two per cycle"
-  assert-eq (decide $gcfg $now [(do $next DEMO-11) (do $next DEMO-12) (do $next DEMO-13)] [] [] $g1.state | get actions | types $in) ["spec-gate DEMO-13"] "each ticket once"
-
-  print "watch.nu (fake claude, fixtures)"
   let bin = $"($tmp)/bin"
   mkdir $bin
   let agents = $"($tmp)/agents.json"
@@ -285,11 +221,11 @@ def main [] {
 
   ^rm -rf $tmp
 
-  print "nu/ shared modules (run-tests.nu)"
+  print "nu tests (@test files in nu/tests and skills/*/scripts/tests, run-tests.nu)"
   let nu_tests = (^nu ($skill_dir | path join ../../../nu/run-tests.nu | path expand) | complete)
   let nu_summary = ($nu_tests.stdout | lines | where {|l| $l =~ '^nu tests:' } | str join)
   if $nu_tests.exit_code != 0 { print ($nu_tests.stdout | lines | where {|l| $l =~ 'FAIL' } | str join "\n") }
-  assert-eq $nu_tests.exit_code 0 $"oauth.nu: PKCE, loopback callback, refresh rotation, token store \(($nu_summary | str replace 'nu tests: ' '')\)"
+  assert-eq $nu_tests.exit_code 0 $"oauth, test runner, poll rules, config \(($nu_summary | str replace 'nu tests: ' '')\)"
 
   print "workflows (node --test)"
   let tests = ($skill_dir | path join ../../../workflows/test | path expand)

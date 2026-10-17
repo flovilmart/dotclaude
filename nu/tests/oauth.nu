@@ -1,5 +1,5 @@
-# Tests for oauth.nu: every exported command is a test (the nupm convention).
-# Run: nu ~/.claude/nu/run-tests.nu
+# Tests for oauth.nu, marked with std/testing's @test. Run: nu ~/.claude/nu/run-tests.nu
+use std/testing *
 use std/assert
 use ../oauth.nu
 
@@ -34,11 +34,13 @@ def form-of [captured: string] {
 }
 
 # expected value from Python's hashlib + base64.urlsafe_b64encode on the RFC 7636 appendix B verifier
-export def "test pkce challenge is the unpadded base64url sha256 of the verifier" [] {
+@test
+def "pkce challenge is the unpadded base64url sha256 of the verifier" [] {
   assert equal (oauth challenge-of "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 }
 
-export def "test pkce verifier is 43 url-safe chars and matches its challenge" [] {
+@test
+def "pkce verifier is 43 url-safe chars and matches its challenge" [] {
   let pk = (oauth pkce)
   assert equal ($pk.verifier | str length) 43
   assert ($pk.verifier =~ '^[A-Za-z0-9_-]+$')
@@ -46,7 +48,8 @@ export def "test pkce verifier is 43 url-safe chars and matches its challenge" [
   assert equal $pk.method "S256"
 }
 
-export def "test authorize url carries the PKCE and loopback parameters" [] {
+@test
+def "authorize url carries the PKCE and loopback parameters" [] {
   let url = (oauth authorize-url (provider) {challenge: "ch", method: "S256"} "st")
   assert ($url | str starts-with "https://auth.example/authorize?")
   let q = ($url | url parse | get query)
@@ -55,20 +58,24 @@ export def "test authorize url carries the PKCE and loopback parameters" [] {
   }
 }
 
-export def "test callback code is taken from a request line or a pasted url" [] {
+@test
+def "callback code is taken from a request line or a pasted url" [] {
   assert equal (oauth parse-callback "GET /callback?code=abc%2B1&state=st HTTP/1.1" "st") "abc+1"
   assert equal (oauth parse-callback "http://127.0.0.1:18765/callback?state=st&code=xyz" "st") "xyz"
 }
 
-export def "test callback with a wrong state is refused" [] {
+@test
+def "callback with a wrong state is refused" [] {
   assert error {|| oauth parse-callback "GET /callback?code=abc&state=other HTTP/1.1" "st" }
 }
 
-export def "test callback with a provider error is refused" [] {
+@test
+def "callback with a provider error is refused" [] {
   assert error {|| oauth parse-callback "GET /callback?error=access_denied&state=st HTTP/1.1" "st" }
 }
 
-export def "test loopback listener returns the request line and answers the browser" [] {
+@test
+def "loopback listener returns the request line and answers the browser" [] {
   let page = (mktemp | str trim)
   let browser = (job spawn { sleep 500ms; http get "http://127.0.0.1:18765/callback?code=c1&state=s1" | save --force $page })
   let line = (oauth wait-for-callback 18765 10sec)
@@ -77,11 +84,13 @@ export def "test loopback listener returns the request line and answers the brow
   assert (open --raw $page | str contains "You can close this tab")
 }
 
-export def "test listener gives up after the timeout" [] {
+@test
+def "listener gives up after the timeout" [] {
   assert equal (oauth wait-for-callback 18767 1sec) ""
 }
 
-export def "test refresh posts a public-client refresh grant and rotates the refresh token" [] {
+@test
+def "refresh posts a public-client refresh grant and rotates the refresh token" [] {
   let ep = (fake-token-endpoint 18771 {access_token: "a2", refresh_token: "r2", expires_in: 86400, scope: "read,write"})
   let now = ("2026-10-17T12:00:00Z" | into datetime)
   let t = (oauth refresh $ep.provider "r1" --now $now)
@@ -95,13 +104,15 @@ export def "test refresh posts a public-client refresh grant and rotates the ref
   assert equal ($t.expires_at | into datetime) ($now + 1day)
 }
 
-export def "test token is served from the store while it is fresh" [] {
+@test
+def "token is served from the store while it is fresh" [] {
   let p = (provider)
   oauth store-set $p {access_token: "a1", refresh_token: "r1", expires_at: "2026-10-17T13:00:00+0000", scope: ""}
   assert equal (oauth token $p --now ("2026-10-17T12:00:00Z" | into datetime)) "a1"
 }
 
-export def "test token near expiry is refreshed and the rotated refresh token stored" [] {
+@test
+def "token near expiry is refreshed and the rotated refresh token stored" [] {
   let ep = (fake-token-endpoint 18772 {access_token: "a2", refresh_token: "r2", expires_in: 86400})
   let p = $ep.provider
   oauth store-set $p {access_token: "a1", refresh_token: "r1", expires_at: "2026-10-17T12:05:00+0000", scope: ""}
@@ -111,7 +122,8 @@ export def "test token near expiry is refreshed and the rotated refresh token st
   assert equal (oauth store-get $p | get refresh_token) "r2"
 }
 
-export def "test a refresh without a new refresh token keeps the old one" [] {
+@test
+def "a refresh without a new refresh token keeps the old one" [] {
   let ep = (fake-token-endpoint 18773 {access_token: "a2", expires_in: 3600})
   let p = $ep.provider
   oauth store-set $p {access_token: "a1", refresh_token: "r1", expires_at: "2026-10-17T11:00:00+0000", scope: ""}
@@ -120,7 +132,8 @@ export def "test a refresh without a new refresh token keeps the old one" [] {
   assert equal (oauth store-get $p | get refresh_token) "r1"
 }
 
-export def "test the token file is private and logout removes it" [] {
+@test
+def "the token file is private and logout removes it" [] {
   let p = (provider)
   oauth store-set $p {access_token: "a1", refresh_token: "r1", expires_at: null, scope: ""}
   let f = $"($p.store_dir)/test.json"
@@ -130,7 +143,8 @@ export def "test the token file is private and logout removes it" [] {
   assert equal (oauth status $p | get signed_in) false
 }
 
-export def "test a listener left by an interrupted login is cleared before listening again" [] {
+@test
+def "a listener left by an interrupted login is cleared before listening again" [] {
   let stale = (job spawn { "stale" | ^nc -l 127.0.0.1 18774 | ignore })
   sleep 200ms
   let browser = (job spawn { sleep 700ms; http get "http://127.0.0.1:18774/callback?code=fresh&state=s" | ignore })
@@ -138,6 +152,7 @@ export def "test a listener left by an interrupted login is cleared before liste
   assert equal (oauth parse-callback $line "s") "fresh"
 }
 
-export def "test token without login says to log in" [] {
+@test
+def "token without login says to log in" [] {
   assert error {|| oauth token (provider) }
 }
