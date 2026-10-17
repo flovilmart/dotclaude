@@ -56,14 +56,15 @@ Write the answers into `config.local.yaml` with the template's keys, order and c
 
 Run in parallel. Print **Waiting on you** first, then the rest as one compact table plus one line per item.
 
-**Waiting on you**, oldest first, each line with its link and the one action expected:
+Start from `nu -c 'use ~/.claude/nu/shell/inbox.nu; inbox | to json'`: one row per running session with `waiting` (from the watcher's `waiting.json`, the state files and Claude's own state), so the labels below match what `inbox` shows.
 
-- open **draft** PRs from `pr-sweep.nu` that carry a ticket → `validate: <PR url>` (coordinators leave only finished slices as drafts, so every draft is waiting for your validation). Add the coordinator's `ready to validate` / `re-validate <criteria>` note when you have it.
-- issues with `needs_plan_label` → `approve or comment on the plan: <issue url>`.
-- issues with `needs_spec_label` → `answer clarifications: <issue url>`.
-- coordinators whose state file says `blocked`, or whose `waitingFor` is a permission prompt → `answer <ticket>: claude attach <ticket>`.
+**Waiting on you**, grouped in this order, oldest first within a group, each line with its link and the one action expected:
 
-Then **Waiting on coworkers**: non-draft PRs with `requested` reviewers and no approval, with their age (so you know whom to nudge).
+- **needs input**: issues with `needs_spec_label` → `answer clarifications: <issue url>`; coordinators whose state file says `blocked`, or whose `waitingFor` is a permission prompt → `answer <ticket>: claude attach <ticket>`.
+- **needs plan validation**: issues with `needs_plan_label` → `approve or comment on the plan: <issue url>`.
+- **draft ready**: open **draft** PRs from `pr-sweep.nu` that carry a ticket → `validate: <PR url>` (coordinators leave only finished slices as drafts, so every draft is waiting for your validation). Add the coordinator's `ready to validate` / `re-validate <criteria>` note when you have it.
+
+Then **waiting review** (on coworkers): non-draft PRs with `requested` reviewers and no approval, with their age (so you know whom to nudge). Never list these as needing input.
 
 Then:
 

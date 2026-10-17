@@ -49,8 +49,11 @@ def "the autoload file loads the shell modules from the home checkout" [] {
   assert ($text | str contains "use ~/.claude/nu/shell/inbox.nu")
 }
 
-# A PATH with a fake `claude agents --json` (a, e: blocked, b: blocked and older, c: working, d: blocked
-# but not running) and a fake `tmux` whose panes run `claude attach b`; tmux calls go to $env.FAKE_LOG
+# A PATH with a fake `claude agents --json` and a fake `tmux` whose panes run `claude attach b`; tmux calls
+# go to $env.FAKE_LOG. Sessions (Claude's state; what the watcher or the state file says):
+#   a ENG-1 blocked, waiting review     b ENG-2 blocked, nothing known (oldest)   c ENG-3 working
+#   d ENG-4 blocked but not running     e ENG-5 blocked, draft ready + a blocked slice in its state file
+#   f ENG-6 idle, needs plan validation
 def fake-sessions [] {
   let bin = (mktemp -d | str trim)
   [
@@ -59,6 +62,7 @@ def fake-sessions [] {
     {id: c, pid: 3, name: "ENG-3", cwd: "/w/c", startedAt: 3000, state: working}
     {id: d, name: "ENG-4", cwd: "/w/d", startedAt: 4000, state: blocked}
     {id: e, pid: 5, name: "ENG-5", cwd: "/w/e", startedAt: 2500, state: blocked}
+    {id: f, pid: 6, name: "ENG-6", cwd: "/w/f", startedAt: 2600, state: done}
   ] | to json | save $"($bin)/agents.json"
   $"#!/bin/sh\ncat '($bin)/agents.json'\n" | save $"($bin)/claude"
   r##'#!/bin/sh
@@ -73,29 +77,68 @@ esac
   $env.PATH | prepend $bin
 }
 
-@test
-def "inbox lists the running sessions that need input oldest first" [] {
-  let s = (with-env {PATH: (fake-sessions)} { inbox })
-  assert equal ($s | get id) [b a e]
-  assert equal ($s | get name) ["ENG-2" "ENG-1" "ENG-5"]
+# A watcher state dir: waiting.json, and ENG-5's state file with a blocked slice
+def fake-state [] {
+  let dir = (mktemp -d | str trim)
+  {at: "2026-10-17T12:00:00+0000", tickets: [
+    {ticket: "ENG-1", waiting: "waiting review", detail: "https://gh/pr/1"}
+    {ticket: "ENG-5", waiting: "draft ready", detail: "https://gh/pr/5"}
+    {ticket: "ENG-6", waiting: "needs plan validation", detail: "plan on ENG-6 in Linear"}
+  ]} | to json | save $"($dir)/waiting.json"
+  mkdir $"($dir)/state"
+  "# ENG-5\nphase: subtasks\n## Slices\n| # | branch | status | PR |\n| 1 | b1 | awaiting-validation | https://gh/pr/5 |\n| 2 | b2 | blocked | |\n" | save $"($dir)/state/ENG-5.md"
+  $dir
 }
 
 @test
-def "inbox open attaches one after another outside tmux" [] {
-  let plan = (with-env {PATH: (fake-sessions), TMUX: ""} { inbox open --dry-run })
-  assert equal ($plan | get action) [attach attach attach]
+def "inbox says what each running session waits on most urgent first" [] {
+  let s = (with-env {PATH: (fake-sessions)} { inbox --state-dir (fake-state) })
+  assert equal ($s | select name waiting detail) [
+    {name: "ENG-2", waiting: "needs input", detail: ""}
+    {name: "ENG-5", waiting: "needs input", detail: "question in the session"}
+    {name: "ENG-6", waiting: "needs plan validation", detail: "plan on ENG-6 in Linear"}
+    {name: "ENG-1", waiting: "waiting review", detail: "https://gh/pr/1"}
+  ]
+}
+
+@test
+def "inbox without the watcher calls every blocked session needs input" [] {
+  let s = (with-env {PATH: (fake-sessions)} { inbox --state-dir (mktemp -d | str trim) })
+  assert equal ($s | select name waiting) [
+    {name: "ENG-2", waiting: "needs input"} {name: "ENG-1", waiting: "needs input"} {name: "ENG-5", waiting: "needs input"}
+  ]
+}
+
+@test
+def "inbox and the poll rules name the same waits in the same order" [] {
+  let rules = (^nu --no-config-file -c $"use ($HERE | path join ../../skills/linear-poll/scripts/rules.nu) WAITS; $WAITS | to nuon" | from nuon)
+  assert equal $inbox.WAITS $rules
+}
+
+@test
+def "inbox open skips sessions waiting review unless all" [] {
+  let st = (fake-state)
+  let mine = (with-env {PATH: (fake-sessions), TMUX: ""} { inbox open --dry-run --state-dir $st })
+  assert equal ($mine | get name) ["ENG-2" "ENG-5" "ENG-6"]
+  assert equal ($mine | get action | uniq) [attach]
+  let all = (with-env {PATH: (fake-sessions), TMUX: ""} { inbox open --all --dry-run --state-dir $st })
+  assert equal ($all | get name) ["ENG-2" "ENG-5" "ENG-6" "ENG-1"]
 }
 
 @test
 def "inbox open splits one tmux window into a pane per session not already attached" [] {
   let log = (mktemp | str trim)
-  with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open }
+  let st = (fake-state)
+  with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --state-dir $st }
   let calls = (open --raw $log | lines)
   assert equal ($calls | where $it =~ "^(new-window|split-window)") [
-    "new-window -P -F #{window_id} #{pane_id} -n inbox -c /w/a claude attach a"
-    "split-window -P -F #{pane_id} -t @5 -c /w/e claude attach e"
+    "new-window -P -F #{window_id} #{pane_id} -n inbox -c /w/e claude attach e"
+    "split-window -P -F #{pane_id} -t @5 -c /w/f claude attach f"
   ]
-  assert equal ($calls | where $it starts-with "set-option -p") ["set-option -p -t %8 @inbox ENG-1" "set-option -p -t %9 @inbox ENG-5"]
+  assert equal ($calls | where $it starts-with "set-option -p") [
+    "set-option -p -t %8 @inbox ENG-5 · needs input"
+    "set-option -p -t %9 @inbox ENG-6 · needs plan validation"
+  ]
   assert ("select-layout -t @5 tiled" in $calls)
   assert equal ($calls | last) "select-pane -t %8"
 }
@@ -103,11 +146,12 @@ def "inbox open splits one tmux window into a pane per session not already attac
 @test
 def "inbox open windows opens a tmux window per session not already attached" [] {
   let log = (mktemp | str trim)
-  with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --windows }
+  let st = (fake-state)
+  with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --windows --state-dir $st }
   let calls = (open --raw $log | lines)
   assert equal ($calls | where $it starts-with "new-window") [
-    "new-window -d -n ENG-1 -c /w/a claude attach a"
     "new-window -d -n ENG-5 -c /w/e claude attach e"
+    "new-window -d -n ENG-6 -c /w/f claude attach f"
   ]
   assert equal ($calls | where $it starts-with "select-window") ["select-window -t %7"]
 }

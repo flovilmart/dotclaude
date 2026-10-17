@@ -219,6 +219,7 @@ def main [] {
   assert-eq $out1.1 "send DEMO-6: Reply on the plan for DEMO-6: approve or revise, and continue /ticket-workflow" "the answer is relayed to the running coordinator"
   let saved = (open $"($wstate)/watch-state.json")
   assert-eq ($saved.cooldown | columns) ["DEMO-1"] "the dispatched ticket is in cooldown"
+  assert-eq (open $"($wstate)/waiting.json" | get tickets | select ticket waiting) [{ticket: DEMO-6, waiting: "needs plan validation"}] "waiting.json says what each ticket waits on"
   assert-eq (do $run) [] "second run: nothing new, nothing printed"
   assert-eq ($"($wstate)/watch.log" | path exists) true "actions are logged"
 

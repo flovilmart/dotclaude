@@ -28,6 +28,9 @@
 
 use config.nu resolve-repo
 
+# What a ticket can wait on, most urgent first (the first three are on the owner, the last on a coworker)
+export const WAITS = ["needs input" "needs plan validation" "draft ready" "waiting review"]
+
 def has-label [issue, label] { $label != null and ($label in $issue.labels) }
 def session-of [sessions: list, ticket] { $sessions | where {|s| $s.name == $ticket } | get 0? }
 def ts [v] { $v | into datetime }
@@ -214,4 +217,33 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
       cooldown: ($state.cooldown | transpose ticket until | where {|c| (ts $c.until) > $now } | reduce --fold {} {|c, acc| $acc | upsert $c.ticket $c.until })
     }
   }
+}
+
+# What each ticket waits on, from its Linear labels and open PRs; one row per ticket, the most urgent
+# of WAITS. A sub-issue counts for its parent (the coordinator is named after the parent).
+#   needs input            clarifications asked in a Linear comment (needs_spec_label)
+#   needs plan validation  the slice plan is posted for approval (needs_plan_label)
+#   draft ready            a draft PR waits for the owner's validation
+#   waiting review         PRs out of draft, not approved yet: a coworker's turn
+# Rows: {ticket waiting detail}; detail is the PR urls, or where to answer in Linear.
+export def ticket-waits [cfg, issues: list, prs: list] {
+  let open = ($prs | where {|r| $r.state == "open" and $r.ticket != "" })
+  $issues
+  | each {|i|
+      let t = ($i.parent? | default $i.identifier)
+      if (has-label $i $cfg.needs_spec_label?) {
+        [{ticket: $t, waiting: "needs input", detail: $"clarifications on ($i.identifier) in Linear"}]
+      } else if (has-label $i $cfg.needs_plan_label?) {
+        [{ticket: $t, waiting: "needs plan validation", detail: $"plan on ($i.identifier) in Linear"}]
+      } else { [] }
+    }
+  | flatten
+  | append ($open | where draft | each {|r| {ticket: $r.ticket, waiting: "draft ready", detail: $r.url} })
+  | append ($open | where {|r| not $r.draft and $r.review != "APPROVED" } | each {|r| {ticket: $r.ticket, waiting: "waiting review", detail: $r.url} })
+  | group-by ticket
+  | items {|ticket, rows|
+      let top = ($rows | insert rank {|r| $WAITS | enumerate | where item == $r.waiting | get index.0 } | sort-by rank | get 0.waiting)
+      {ticket: $ticket, waiting: $top, detail: ($rows | where waiting == $top | get detail | uniq | str join " ")}
+    }
+  | sort-by ticket
 }

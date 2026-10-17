@@ -21,7 +21,8 @@
 # --check       check the API key and the queries, print what they return, exit
 # --fixtures    read {issues, comments, sessions, prs} from a file instead of Linear, claude and gh (selftest)
 #
-# State: <state-dir>/watch-state.json (what was already reported), events.log, watch.log, watch.pid.
+# State: <state-dir>/watch-state.json (what was already reported), events.log, watch.log, watch.pid,
+# and waiting.json: what each ticket waits on (rules.nu ticket-waits), for `inbox` and the dashboard.
 # Linear auth (linear.nu): the API key, read once at start with `op read <linear_api_key_ref>`.
 
 use config.nu *
@@ -59,11 +60,13 @@ def load-state [dir: string] {
   if ($p | path exists) { try { open $p } catch { {} } } else { {} }
 }
 
-def save-state [dir: string, state] {
-  let p = $"($dir)/watch-state.json"
-  $state | to json | save --force $"($p).tmp"
+def save-json [dir: string, name: string, value] {
+  let p = $"($dir)/($name)"
+  $value | to json | save --force $"($p).tmp"
   mv --force $"($p).tmp" $p
 }
+
+def save-state [dir: string, state] { save-json $dir watch-state.json $state }
 
 def gather [cfg, key, fixtures, with_prs: bool, since: string] {
   if $fixtures != null {
@@ -141,6 +144,8 @@ def cycle [cfg, key: string, fixtures, dry: bool, dir: string, state, with_prs: 
     if $i.identifier in $targets { $i | upsert comments ($by_issue | get --optional $i.identifier | default []) } else { $i }
   })
   let r = (decide $cfg $now $issues $data.sessions $data.prs $state)
+  # PRs are swept every second cycle; in between, the last sweep's open PRs still say what waits
+  let open_prs = (if $with_prs { $data.prs | where state == "open" } else { $state.openPrs? | default [] })
 
   if $dry {
     $r.actions | each {|a| print $"would ($a | to nuon)" } | ignore
@@ -158,7 +163,9 @@ def cycle [cfg, key: string, fixtures, dry: bool, dir: string, state, with_prs: 
   }
   let until = (($now + $COOLDOWN) | format date "%Y-%m-%dT%H:%M:%S%z")
   let cooldown = ($results | where cool | reduce --fold $r.state.cooldown {|res, acc| $acc | upsert $res.ticket $until })
+  save-json $dir waiting.json {at: ($now | format date "%Y-%m-%dT%H:%M:%S%z"), tickets: (ticket-waits $cfg $issues $open_prs)}
   $r.state
+  | upsert openPrs $open_prs
   | upsert cooldown $cooldown
   | upsert lastRun ($now | format date "%Y-%m-%dT%H:%M:%S%z")
   | upsert lastPrSweep (if $with_prs { $now | date to-timezone UTC | format date "%Y-%m-%dT%H:%M:%SZ" } else { $since })

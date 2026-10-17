@@ -136,3 +136,36 @@ def "the early spec gate runs at most two per cycle and each ticket once" [] {
   assert equal (types $first.actions) ["spec-gate DEMO-11" "spec-gate DEMO-12"]
   assert equal (decide $gcfg (now) $tickets [] [] $first.state | get actions | types $in) ["spec-gate DEMO-13"]
 }
+
+@test
+def "ticket waits name what each ticket is waiting on" [] {
+  let issues = [
+    (issue DEMO-1 {labels: [needs-spec]})
+    (issue DEMO-2 {labels: [needs-plan-approval]})
+    (issue DEMO-3)
+    (issue DEMO-4)
+    (issue DEMO-5)
+  ]
+  let prs = [
+    (pr 3 DEMO-3 {draft: true})
+    (pr 4 DEMO-4)
+    (pr 5 DEMO-5 {review: "APPROVED"})
+    (pr 6 DEMO-5 {state: "merged"})
+  ]
+  assert equal (ticket-waits (cfg) $issues $prs) [
+    {ticket: DEMO-1, waiting: "needs input", detail: "clarifications on DEMO-1 in Linear"}
+    {ticket: DEMO-2, waiting: "needs plan validation", detail: "plan on DEMO-2 in Linear"}
+    {ticket: DEMO-3, waiting: "draft ready", detail: "https://gh/pr/3"}
+    {ticket: DEMO-4, waiting: "waiting review", detail: "https://gh/pr/4"}
+  ]
+}
+
+@test
+def "ticket waits keep the most urgent and count sub-issues for their parent" [] {
+  let issues = [(issue DEMO-1) (issue DEMO-9 {parent: DEMO-1, labels: [needs-spec]})]
+  let prs = [(pr 1 DEMO-1) (pr 2 DEMO-1 {draft: true}) (pr 3 DEMO-1 {draft: true}) (pr 4 DEMO-2) (pr 5 DEMO-2 {draft: true})]
+  assert equal (ticket-waits (cfg) $issues $prs) [
+    {ticket: DEMO-1, waiting: "needs input", detail: "clarifications on DEMO-9 in Linear"}
+    {ticket: DEMO-2, waiting: "draft ready", detail: "https://gh/pr/5"}
+  ]
+}
