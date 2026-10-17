@@ -49,7 +49,7 @@ def "the autoload file loads the shell modules from the home checkout" [] {
   assert ($text | str contains "use ~/.claude/nu/shell/inbox.nu")
 }
 
-# A PATH with a fake `claude agents --json` (a: blocked, b: blocked and older, c: working, d: blocked
+# A PATH with a fake `claude agents --json` (a, e: blocked, b: blocked and older, c: working, d: blocked
 # but not running) and a fake `tmux` whose panes run `claude attach b`; tmux calls go to $env.FAKE_LOG
 def fake-sessions [] {
   let bin = (mktemp -d | str trim)
@@ -58,11 +58,16 @@ def fake-sessions [] {
     {id: b, pid: 2, name: "ENG-2", cwd: "/w/b", startedAt: 1000, state: blocked}
     {id: c, pid: 3, name: "ENG-3", cwd: "/w/c", startedAt: 3000, state: working}
     {id: d, name: "ENG-4", cwd: "/w/d", startedAt: 4000, state: blocked}
+    {id: e, pid: 5, name: "ENG-5", cwd: "/w/e", startedAt: 2500, state: blocked}
   ] | to json | save $"($bin)/agents.json"
   $"#!/bin/sh\ncat '($bin)/agents.json'\n" | save $"($bin)/claude"
   r##'#!/bin/sh
 echo "$*" >> "$FAKE_LOG"
-if [ "$1" = list-panes ]; then printf '%%0\tnu\n%%7\t"claude attach b"\n'; fi
+case "$1" in
+  list-panes) printf '%%0\tnu\n%%7\t"claude attach b"\n' ;;
+  new-window) case "$*" in *-P*) echo '@5 %8' ;; esac ;;
+  split-window) echo '%9' ;;
+esac
 '## | save $"($bin)/tmux"
   chmod +x $"($bin)/claude" $"($bin)/tmux"
   $env.PATH | prepend $bin
@@ -71,21 +76,38 @@ if [ "$1" = list-panes ]; then printf '%%0\tnu\n%%7\t"claude attach b"\n'; fi
 @test
 def "inbox lists the running sessions that need input oldest first" [] {
   let s = (with-env {PATH: (fake-sessions)} { inbox })
-  assert equal ($s | get id) [b a]
-  assert equal ($s | get name) ["ENG-2" "ENG-1"]
+  assert equal ($s | get id) [b a e]
+  assert equal ($s | get name) ["ENG-2" "ENG-1" "ENG-5"]
 }
 
 @test
 def "inbox open attaches one after another outside tmux" [] {
   let plan = (with-env {PATH: (fake-sessions), TMUX: ""} { inbox open --dry-run })
-  assert equal ($plan | get action) [attach attach]
+  assert equal ($plan | get action) [attach attach attach]
 }
 
 @test
-def "inbox open opens a tmux window per session not already attached" [] {
+def "inbox open splits one tmux window into a pane per session not already attached" [] {
   let log = (mktemp | str trim)
   with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open }
   let calls = (open --raw $log | lines)
-  assert equal ($calls | where $it starts-with "new-window") ["new-window -d -n ENG-1 -c /w/a claude attach a"]
+  assert equal ($calls | where $it =~ "^(new-window|split-window)") [
+    "new-window -P -F #{window_id} #{pane_id} -n inbox -c /w/a claude attach a"
+    "split-window -P -F #{pane_id} -t @5 -c /w/e claude attach e"
+  ]
+  assert equal ($calls | where $it starts-with "set-option -p") ["set-option -p -t %8 @inbox ENG-1" "set-option -p -t %9 @inbox ENG-5"]
+  assert ("select-layout -t @5 tiled" in $calls)
+  assert equal ($calls | last) "select-pane -t %8"
+}
+
+@test
+def "inbox open windows opens a tmux window per session not already attached" [] {
+  let log = (mktemp | str trim)
+  with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --windows }
+  let calls = (open --raw $log | lines)
+  assert equal ($calls | where $it starts-with "new-window") [
+    "new-window -d -n ENG-1 -c /w/a claude attach a"
+    "new-window -d -n ENG-5 -c /w/e claude attach e"
+  ]
   assert equal ($calls | where $it starts-with "select-window") ["select-window -t %7"]
 }
