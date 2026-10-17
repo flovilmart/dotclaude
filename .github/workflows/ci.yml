@@ -37,7 +37,7 @@ jobs:
             target: aarch64-apple-darwin
             sha256: a61806761db7bc2eddfc313d5ec496c92776a37124bc64a3036374bd55e8c881
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The official release tarball, checked against a pinned SHA-256; no third-party action
       - name: Install nushell ${{ matrix.nu }}
@@ -57,6 +57,7 @@ jobs:
       - name: Tools
         run: |
           nu --version
+          nu -c 'print $"os: ($nu.os-info.name)"'
           node --version
           git --version
           command -v nc

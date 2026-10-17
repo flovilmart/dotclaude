@@ -147,7 +147,7 @@ export def refresh [p, refresh_token: string, --now: datetime] {
 # ── storage: macOS Keychain, or a 0600 file ─────────────────────────────────
 
 def backend [p] {
-  $p.store? | default (if ((sys host).name =~ "(?i)darwin") { "keychain" } else { "file" })
+  $p.store? | default (if $nu.os-info.name == "macos" { "keychain" } else { "file" })
 }
 
 def store-file [p] {

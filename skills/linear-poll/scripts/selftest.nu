@@ -233,9 +233,12 @@ def main [] {
     print "  skip node not installed"
   } else {
     let files = (glob $"($tests)/*.test.mjs")
-    let out = (do { ^node --test ...$files } | complete)
+    # TAP explicitly: newer node defaults to another format, and the pass count proves tests ran
+    let out = (do { ^node --test --test-reporter=tap ...$files } | complete)
     let summary = ($out.stdout | lines | where {|l| $l =~ '^# (pass|fail) ' } | str replace '# ' '' | str join ", ")
+    let passed = ($out.stdout | lines | where {|l| $l =~ '^# pass ' } | first 1 | each {|l| $l | str replace '# pass ' '' | into int } | get 0? | default 0)
     assert-eq $out.exit_code 0 $"plan.js and subtask.js regression tests \(($summary)\)"
+    assert-eq ($passed > 0) true $"the workflow tests ran \(($passed) passed\)"
   }
   print "selftest: all passed"
 }
