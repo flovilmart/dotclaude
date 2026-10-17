@@ -27,7 +27,7 @@ jobs:
             nu: 0.111.0
             target: x86_64-unknown-linux-gnu
             sha256: aa5376efaa5f2da98ebae884b901af6504dc8291acf5f4147ac994e9d03cd1ba
-          # the latest release, on Linux and on macOS (BSD nc, Keychain)
+          # the latest release, on Linux and on macOS (BSD userland)
           - os: ubuntu-latest
             nu: 0.112.2
             target: x86_64-unknown-linux-gnu
@@ -60,9 +60,8 @@ jobs:
           nu -c 'print $"os: ($nu.os-info.name)"'
           node --version
           git --version
-          command -v nc
 
-      # Scenarios (worktrees, watcher, follow), every @test file (oauth, runner, rules,
-      # config, syntax of every .nu file) and the workflow tests
+      # Scenarios (worktrees, watcher, follow), every @test file (runner, rules, config,
+      # Linear key handling, shell commands, syntax of every .nu file) and the workflow tests
       - name: selftest
         run: nu skills/linear-poll/scripts/selftest.nu

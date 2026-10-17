@@ -35,11 +35,7 @@ export const SCHEMA = {
   max_parallel: {type: int}
   max_redispatch: {type: int}
   dispatcher_name: {type: string}
-  linear_oauth_client_id: {type: string}
-  linear_oauth_port: {type: int}
-  linear_oauth_host: {type: string}
-  linear_oauth_redirect_uri: {type: string}
-  linear_api_key_ref: {type: string}
+  linear_api_key_ref: {type: string, pattern: '^op://[^/]+/[^/]+/[^/]+$', hint: "op://<vault>/<item>/<field>"}
   watch: {type: string, choices: [monitor cron]}
   watch_interval: {type: int}
   watch_hours: {type: string}
@@ -58,6 +54,12 @@ export const SCHEMA = {
   stack_tool: {type: string, choices: [auto gh-stack manual]}
   slice_branch_pattern: {type: string}
   comment_marker: {type: string}
+}
+
+# Keys the workflow no longer reads: a config that still has them loads, with a warning
+export const REMOVED = {
+  reason: "Linear access is an API key in 1Password at linear_api_key_ref (store it with `linear login`)"
+  keys: [linear_oauth_client_id linear_oauth_port linear_oauth_host linear_oauth_redirect_uri]
 }
 
 def kind [v] {
@@ -83,6 +85,8 @@ export def validate [cfg: record] {
       [$"`($kv.key)` must be ($article) ($spec.type), got ($got) \(($kv.value | to nuon)\)"]
     } else if ($spec.choices? | default []) != [] and $kv.value not-in $spec.choices {
       [$"`($kv.key)` must be one of ($spec.choices | str join ', '), got `($kv.value)`"]
+    } else if ($spec.pattern? | default "") != "" and not ($kv.value =~ $spec.pattern) {
+      [$"`($kv.key)` must look like ($spec.hint), got `($kv.value)`"]
     } else { [] }
   } | flatten)
   $unknown | append $missing | append $typed
@@ -129,6 +133,13 @@ export def parse-markdown [text: string] {
   $pairs | reduce --fold {repos: $repos} {|p, acc| $acc | upsert $p.key $p.value }
 }
 
+# The config without REMOVED keys, warning on stderr about each one found in `source`
+export def drop-removed [cfg: record, source: string] {
+  let found = ($cfg | columns | where {|k| $k in $REMOVED.keys })
+  for k in $found { print --stderr $"config.nu: `($k)` in ($source | path basename) is no longer used: ($REMOVED.reason); remove it" }
+  $cfg | reject ...$found
+}
+
 def read-raw [p: string] {
   if ($p | str ends-with ".md") { parse-markdown (open --raw $p) } else { open --raw $p | from yaml | default {} }
 }
@@ -143,7 +154,7 @@ export def load-config [path: string = ""] {
   } else {
     error make { msg: $"no config at ($p): run /agent-workflow start \(template: skills/agent-workflow/config.example.yaml\)" }
   }
-  let cfg = (normalize (read-raw $source))
+  let cfg = (drop-removed (normalize (read-raw $source)) $source)
   let problems = (validate $cfg)
   if ($problems | is-not-empty) {
     let list = ($problems | each {|m| $"- ($m)" } | str join (char nl))
@@ -179,7 +190,7 @@ def "main migrate" [--from: string = "", --to: string = "", --force] {
   let dst = (if $to == "" { $CONFIG_PATH } else { $to } | path expand)
   if not ($src | path exists) { error make { msg: $"nothing to migrate: no ($src)" } }
   if ($dst | path exists) and not $force { error make { msg: $"($dst) already exists: pass --force to overwrite it" } }
-  let raw = (parse-markdown (open --raw $src))
+  let raw = (drop-removed (parse-markdown (open --raw $src)) $src)
   # schema order, empty values dropped, comma lists split; repo paths stay as written (~ kept)
   let normalized = (normalize $raw)
   let cfg = if "repos" in ($normalized | columns) { $normalized | update repos $raw.repos } else { $normalized }

@@ -1,47 +1,41 @@
-# linear — Linear from your shell, with the agent workflow's config and sign-in.
+# linear — Linear from your shell, with the agent workflow's config and API key.
 #
-#   linear login          sign in once (OAuth with PKCE; opens the browser)
-#   linear status         how the workflow authenticates, and whether it's signed in
+#   linear login          store a personal API key in 1Password, at linear_api_key_ref
+#   linear status         where the key is read from, and whether it can be read (never prints it)
 #   linear me             who you are in Linear
 #   linear issues         your open issues in the configured team, by priority
-#   linear logout         revoke the OAuth token and forget it
 #
-# Config: ~/.claude/skills/agent-workflow/config.local.yaml (team_key, linear_oauth_client_id or
-# linear_api_key_ref), the same file the watcher reads. Loaded at shell start by autoload.nu.
+# Config: ~/.claude/skills/agent-workflow/config.local.yaml (team_key, linear_api_key_ref, default
+# op://Private/Linear/credential), the same file the watcher reads. Loaded at shell start by autoload.nu.
 
-use ../oauth.nu
-use ../../skills/linear-poll/scripts/config.nu [load-config CONFIG_PATH]
-use ../../skills/linear-poll/scripts/linear.nu [provider uses-oauth auth my-issues whoami]
+use ../../skills/linear-poll/scripts/config.nu [load-config]
+use ../../skills/linear-poll/scripts/linear.nu [key-ref store-key auth my-issues whoami]
+
+const KEYS_PAGE = "https://linear.app/settings/account/security"
 
 def cfg [config: string] { if $config == "" { load-config } else { load-config $config } }
 
-def oauth-provider [cfg] {
-  if not (uses-oauth $cfg) {
-    error make { msg: "set linear_oauth_client_id in config.local.yaml (the client ID of your Linear OAuth application)" }
-  }
-  provider $cfg
+# Create a personal API key in Linear and store it in 1Password at linear_api_key_ref
+export def login [--config: string = ""] {
+  let ref = (key-ref (cfg $config))
+  print $"In Linear: Settings → Security & access → Personal API keys → New API key \(($KEYS_PAGE)\)."
+  print "Give it read and write access to the workflow's team, then paste it here."
+  if $nu.os-info.name == "macos" { try { ^open $KEYS_PAGE } }
+  let key = (input --suppress-output "API key: " | str trim)
+  print ""
+  if $key == "" { error make { msg: "no key pasted; nothing stored" } }
+  # check the key before storing it, so a typo doesn't replace a working one
+  let me = (try { whoami $key } catch {|e| error make { msg: $"Linear refused that key: ($e.msg)" } })
+  let stored = (store-key $ref $key)
+  print $"($stored.item) ($ref): the key of ($me.name) <($me.email)>"
 }
 
-# Sign in to Linear with OAuth (opens the browser once; --manual: paste the redirected URL)
-export def login [--manual, --config: string = ""] {
-  oauth login (oauth-provider (cfg $config)) --manual=$manual
-}
-
-# Revoke the OAuth token at Linear and delete it locally
-export def logout [--config: string = ""] {
-  oauth logout (oauth-provider (cfg $config))
-}
-
-# How the agent workflow authenticates to Linear, and whether it's ready (never prints a token)
+# Where the agent workflow reads the Linear API key, and whether it can (never prints the key)
 export def status [--config: string = ""] {
-  let c = (cfg $config)
-  if (uses-oauth $c) {
-    let p = (provider $c)
-    {method: "oauth", redirect_uri: (oauth redirect-uri $p)} | merge (oauth status $p)
-  } else {
-    let ref = ($c.linear_api_key_ref? | default "")
-    {method: "api-key", source: (if ($env.LINEAR_API_KEY? | default "") != "" { "LINEAR_API_KEY" } else if $ref != "" { $ref } else { "not configured" })}
-  }
+  let ref = (key-ref (cfg $config))
+  if ($env.LINEAR_API_KEY? | default "") != "" { return {source: "LINEAR_API_KEY", ref: $ref, readable: true} }
+  let readable = ((which op | is-not-empty) and ((do { ^op read $ref } | complete).exit_code == 0))
+  {source: "1Password", ref: $ref, readable: $readable}
 }
 
 # Who you are in Linear

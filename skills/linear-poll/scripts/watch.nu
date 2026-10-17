@@ -22,13 +22,11 @@
 # --fixtures    read {issues, comments, sessions, prs} from a file instead of Linear, claude and gh (selftest)
 #
 # State: <state-dir>/watch-state.json (what was already reported), events.log, watch.log, watch.pid.
-# Linear auth (linear.nu): with OAuth (linear_oauth_client_id) the token is fetched every cycle,
-# refreshed silently when near expiry; with an API key, `op read <linear_api_key_ref>` runs once at start.
+# Linear auth (linear.nu): the API key, read once at start with `op read <linear_api_key_ref>`.
 
 use config.nu *
 use rules.nu *
 use linear.nu
-use ../../../nu/oauth.nu
 
 const COOLDOWN = 10min
 
@@ -133,10 +131,8 @@ def execute [cfg, key, a] {
   }
 }
 
-def cycle [cfg, fixed_auth, fixtures, dry: bool, dir: string, state, with_prs: bool] {
+def cycle [cfg, key: string, fixtures, dry: bool, dir: string, state, with_prs: bool] {
   let now = (date now)
-  # OAuth: a valid access token for this cycle (refreshed when near expiry); API key: read once at start
-  let key = if $fixtures != null { "" } else if $fixed_auth != null { $fixed_auth } else { linear auth $cfg }
   let since = ($state.lastPrSweep? | default (($now - 1hr) | date to-timezone UTC | format date "%Y-%m-%dT%H:%M:%SZ"))
   let data = (gather $cfg $key $fixtures $with_prs $since)
   let targets = (comment-targets $cfg $data.issues $data.sessions $state)
@@ -192,12 +188,8 @@ def main [
   let cfg = if $config == "" { load-config } else { load-config $config }
   let dir = ($state_dir | path expand)
   mkdir $dir
-  # null = OAuth, resolved every cycle; a string = the API key, read once
-  let fixed_auth = if $fixtures != null or (linear uses-oauth $cfg) { null } else { linear auth $cfg }
-  if $fixtures == null and (linear uses-oauth $cfg) and not (oauth status (linear provider $cfg) | get signed_in) {
-    error make { msg: "not signed in to Linear: run nu ~/.claude/skills/linear-poll/scripts/linear-auth.nu login" }
-  }
-  if $check { check $cfg ($fixed_auth | default (linear auth $cfg)) $dir; return }
+  let key = if $fixtures != null { "" } else { linear auth $cfg }
+  if $check { check $cfg $key $dir; return }
 
   # one watcher at a time: a second one (another Monitor, a cron tick) would act twice
   let pidfile = $"($dir)/watch.pid"
@@ -218,7 +210,7 @@ def main [
     let now = (date now)
     if not $once and not (in-hours $cfg $now) { sleep 5min; continue }
     let with_prs = ($n mod 2 == 0)
-    let res = (try { {ok: (cycle $cfg $fixed_auth $fixtures $dry_run $dir $state $with_prs)} } catch {|e| {err: $e.msg} })
+    let res = (try { {ok: (cycle $cfg $key $fixtures $dry_run $dir $state $with_prs)} } catch {|e| {err: $e.msg} })
     if "ok" in $res {
       $state = $res.ok
       if not $dry_run { save-state $dir $state }

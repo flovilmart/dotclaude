@@ -5,7 +5,7 @@
 # ensure-worktree.nu (create, reuse, free-after-merge, worktree path as input,
 # .worktreeinclude copy, ticket holds), profile-key.nu, pr-sweep.nu's branch → ticket parsing,
 # watch.nu and follow.nu end to end with a fake claude; then the @test files (nu/run-tests.nu:
-# oauth, the test runner, the poll rules, config) and the saved workflows' tests,
+# the test runner, the poll rules, config, Linear key handling, shell commands) and the saved workflows' tests,
 # then runs the saved workflows' regression tests (workflows/test) when node is installed.
 # No network, no Linear, no claude. Prints ok/FAIL per check; exit code 1 on failure.
 #
@@ -245,7 +245,7 @@ def main [] {
   if $nu_tests.exit_code != 0 { print ($nu_tests.stdout | lines | where {|l| $l =~ 'FAIL' } | str join "\n") }
   # the runner's annotations (GitHub Actions) must reach this job's log; it wrote its own summary table
   $nu_tests.stdout | lines | where {|l| $l starts-with "::" } | each {|l| print $l } | ignore
-  assert-eq $nu_tests.exit_code 0 $"oauth, test runner, poll rules, config, syntax of every .nu file \(($nu_summary | str replace 'nu tests: ' '')\)"
+  assert-eq $nu_tests.exit_code 0 $"test runner, poll rules, config, linear key, shell, syntax of every .nu file \(($nu_summary | str replace 'nu tests: ' '')\)"
 
   section "workflows (node --test)"
   let tests = ($skill_dir | path join ../../../workflows/test | path expand)

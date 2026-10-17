@@ -36,9 +36,9 @@ def "enabled only when GITHUB_ACTIONS is true" [] {
 @test
 def "the error location is the first repo file in a rendered error" [] {
   let root = ($HERE | path join ../.. | path expand)
-  let file = ($HERE | path join ../oauth.nu | path expand)
+  let file = ($HERE | path join ../gha.nu | path expand)
   let rendered = $"Error: x\n  ,-[/usr/lib/elsewhere.nu:9:1]\n  ,-[($file):78:16]\n"
-  assert equal (gha error-location $rendered $root) {file: "nu/oauth.nu", line: 78}
+  assert equal (gha error-location $rendered $root) {file: "nu/gha.nu", line: 78}
   assert equal (gha error-location "no location here" $root) null
 }
 

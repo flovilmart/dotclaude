@@ -1,59 +1,56 @@
-# linear.nu — the few Linear GraphQL calls watch.nu needs.
+# linear.nu — the few Linear GraphQL calls the watcher and the `linear` shell command need.
 #
 #   use linear.nu
-#   let auth = (linear auth $cfg)        # the Authorization header value
+#   let auth = (linear auth $cfg)        # the API key, read from 1Password
 #   linear my-issues $auth $cfg.team_key
 #
-# Two ways to authenticate:
-#   - OAuth (linear_oauth_client_id set): authorization code + PKCE through ~/.claude/nu/oauth.nu.
-#     Sign in once with linear-auth.nu login; access tokens last 24h and refresh themselves.
-#     The header is "Bearer <token>".
-#   - a personal API key (linear_api_key_ref, read with `op read`, or $env.LINEAR_API_KEY),
-#     sent as is, without "Bearer".
-# Limits: 2,500 requests/hour per API key; watch.nu makes 1-2 per cycle.
-
-use ../../../nu/oauth.nu
+# Linear access is a personal API key kept in 1Password at linear_api_key_ref (default
+# op://Private/Linear/credential); `linear login` stores it there. $env.LINEAR_API_KEY overrides
+# it (a container or CI without `op`). The key goes in the Authorization header as is.
+# Limits: 2,500 requests/hour per API key; the watcher makes 1-2 per cycle.
 
 const API = "https://api.linear.app/graphql"
+export const DEFAULT_KEY_REF = "op://Private/Linear/credential"
 
-export def uses-oauth [cfg] { ($cfg.linear_oauth_client_id? | default "") != "" }
+# Where the key lives in 1Password
+export def key-ref [cfg] { $cfg.linear_api_key_ref? | default $DEFAULT_KEY_REF }
 
-# Linear as an oauth.nu provider: a public client (PKCE, no secret) acting as the user
-export def provider [cfg] {
-  {
-    name: "linear"
-    authorize_url: "https://linear.app/oauth/authorize"
-    token_url: "https://api.linear.app/oauth/token"
-    revoke_url: "https://api.linear.app/oauth/revoke"
-    client_id: $cfg.linear_oauth_client_id
-    scopes: [read write]
-    scope_sep: ","
-    port: ($cfg.linear_oauth_port? | default 8765)
-    host: ($cfg.linear_oauth_host? | default "127.0.0.1")
-    redirect_uri: ($cfg.linear_oauth_redirect_uri? | default "")
-    extra: {actor: "user"}
-  }
+# {vault item field} of an op://<vault>/<item>/<field> reference
+export def parse-ref [ref: string] {
+  let m = ($ref | parse --regex '^op://(?<vault>[^/]+)/(?<item>[^/]+)/(?<field>[^/]+)$')
+  if ($m | is-empty) { error make { msg: $"a 1Password reference looks like op://<vault>/<item>/<field>, got ($ref)" } }
+  $m.0
 }
 
-# The Authorization header value for the configured method
-export def auth [cfg] {
-  if (uses-oauth $cfg) {
-    $"Bearer (oauth token (provider $cfg))"
-  } else {
-    if ($cfg.linear_api_key_ref? | default "") == "" and ($env.LINEAR_API_KEY? | default "") == "" {
-      error make { msg: "set linear_oauth_client_id (OAuth) or linear_api_key_ref (API key) in config.local.yaml" }
-    }
-    api-key ($cfg.linear_api_key_ref? | default "")
-  }
-}
+# The Authorization header value: the API key
+export def auth [cfg] { api-key (key-ref $cfg) }
 
 export def api-key [ref: string] {
   if ($env.LINEAR_API_KEY? | default "") != "" { return $env.LINEAR_API_KEY }
   let r = (do { ^op read $ref } | complete)
   if $r.exit_code != 0 {
-    error make { msg: $"op read ($ref) failed: ($r.stderr | str trim)" }
+    error make { msg: $"op read ($ref) failed: ($r.stderr | str trim) \(store the key with `linear login`\)" }
   }
   $r.stdout | str trim
+}
+
+# Store a key at an op:// reference: set the field on the item if it exists, else create an
+# API Credential item. The key reaches `op` as an assignment argument (as `op` expects): visible
+# to this user's processes for an instant, never written to disk.
+export def store-key [ref: string, key: string] {
+  let r = (parse-ref $ref)
+  # an API Credential's own `credential` field is already concealed; any other field is made a password field
+  let assignment = if $r.field == "credential" { $"credential=($key)" } else { $"($r.field)[password]=($key)" }
+  let exists = ((do { ^op item get $r.item --vault $r.vault --format json } | complete).exit_code == 0)
+  let out = if $exists {
+    do { ^op item edit $r.item --vault $r.vault $assignment } | complete
+  } else {
+    do { ^op item create --category "API Credential" --title $r.item --vault $r.vault $assignment } | complete
+  }
+  if $out.exit_code != 0 {
+    error make { msg: $"op couldn't store the key at ($ref): ($out.stderr | str trim)" }
+  }
+  {ref: $ref, item: (if $exists { "updated" } else { "created" })}
 }
 
 export def gql [auth: string, query: string, variables: record = {}] {

@@ -1,9 +1,8 @@
-# Tests for config.nu (config.local.yaml: loading, validation, migration from the old markdown)
-# and linear.nu's choice of auth, against the shipped config.example.yaml.
+# Tests for config.nu (config.local.yaml: loading, validation, migration from the old markdown),
+# against the shipped config.example.yaml.
 use std/testing *
 use std/assert
 use ../config.nu *
-use ../linear.nu
 
 const HERE = path self .
 def example-path [] { $HERE | path join ../../../agent-workflow/config.example.yaml }
@@ -41,9 +40,27 @@ def "the example config documents every key the schema knows" [] {
 
 @test
 def "empty values are absent" [] {
-  let cfg = (example)
-  assert equal ($cfg.linear_oauth_client_id? | default "absent") "absent"
-  assert equal ($cfg.linear_oauth_host? | default "absent") "absent"
+  let cfg = (load-config (yaml-config "team_key: X\nmodel:\ndispatcher_name: ''\nrepos:\n  - match: default\n    repo: ~/a\n"))
+  assert equal ($cfg.model? | default "absent") "absent"
+  assert equal ($cfg.dispatcher_name? | default "absent") "absent"
+}
+
+@test
+def "removed keys are dropped with a warning instead of failing" [] {
+  let f = (yaml-config "team_key: X\nlinear_oauth_client_id: client-1\nlinear_oauth_port: 8765\nrepos:\n  - match: default\n    repo: ~/a\n")
+  let r = (with-home $env.HOME $"load-config ($f | to json) | columns | to json")
+  assert equal $r.exit_code 0
+  assert ("linear_oauth_client_id" not-in ($r.stdout | from json))
+  assert ($r.stderr | str contains "`linear_oauth_client_id` in")
+  assert ($r.stderr | str contains "`linear_oauth_port` in")
+  assert ($r.stderr | str contains "linear login")
+}
+
+@test
+def "the api key reference must be a 1Password reference" [] {
+  let f = (yaml-config "team_key: X\nlinear_api_key_ref: lin_api_0123\nrepos:\n  - match: default\n    repo: ~/a\n")
+  let msg = (try { load-config $f; "loaded" } catch {|e| $e.msg })
+  assert ($msg | str contains "`linear_api_key_ref` must look like op://<vault>/<item>/<field>")
 }
 
 @test
@@ -90,27 +107,6 @@ def "migrate refuses to overwrite without force" [] {
 @test
 def "a comma separated reviewers value from the old format becomes a list" [] {
   assert equal (normalize {reviewers: "alice, bob"} | get reviewers) [alice bob]
-}
-
-@test
-def "a configured public redirect uri reaches the linear provider" [] {
-  let p = (linear provider ((example) | upsert linear_oauth_client_id "client-1" | upsert linear_oauth_redirect_uri "https://t-8765.euw.devtunnels.ms/callback"))
-  assert equal $p.redirect_uri "https://t-8765.euw.devtunnels.ms/callback"
-  assert equal $p.port 8765
-}
-
-@test
-def "linear uses an API key unless an OAuth client is configured" [] {
-  let cfg = (example)
-  assert equal (linear uses-oauth $cfg) false
-  assert equal (linear uses-oauth ($cfg | upsert linear_oauth_client_id "client-1")) true
-}
-
-@test
-def "the linear OAuth provider is a public client on the loopback port acting as the user" [] {
-  let p = (linear provider ((example) | upsert linear_oauth_client_id "client-1"))
-  assert equal ($p | select client_id scope_sep port host redirect_uri extra) {client_id: "client-1", scope_sep: ",", port: 8765, host: "127.0.0.1", redirect_uri: "", extra: {actor: "user"}}
-  assert ("client_secret" not-in $p)
 }
 
 @test
