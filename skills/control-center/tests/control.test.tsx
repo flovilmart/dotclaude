@@ -2,12 +2,12 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 
 import { age, arrivals, grouped, parseBoard, splitDetail, summary, urlLabel } from '../hooks/board'
 
-const row = (id: string, name: string, waiting: string, detail = '') =>
-  ({ id, name, waiting, detail, cwd: '~/w', started: '2026-10-17T10:00:00+00:00' })
+const row = (id: string, name: string, waiting: string, detail = '', next = '') =>
+  ({ id, name, label: name, waiting, detail, next, cwd: '~/w', started: '2026-10-17T10:00:00+00:00' })
 
 const BOARD = [
-  row('a', 'PROD-1', 'needs input', 'question in the session'),
-  row('b', 'PROD-2', 'draft ready', 'https://github.com/o/r/pull/3994 https://github.com/o/r/pull/3995'),
+  row('a', 'PROD-1', 'needs input', 'question in the session', 'answer Q1 (which tenant) in the session'),
+  row('b', 'PROD-2 · Fix login redirect', 'draft ready', 'https://github.com/o/r/pull/3994 https://github.com/o/r/pull/3995', 'validate #3994 #3995, then mark ready'),
   row('c', 'PROD-3', 'working'),
   row('d', 'PROD-4', 'waiting review', 'https://github.com/o/r/pull/3962'),
 ]
@@ -75,7 +75,9 @@ test('/control draws the agents grouped, with PR links and a status line', async
   })
   expect(await ui.find({ type: 'Text', text: /needs input \(1\)/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /draft ready \(1\)/ })).toBeDefined()
-  expect((await ui.find({ key: 'b' }))?.text).toContain('PROD-2')
+  expect((await ui.find({ key: 'b' }))?.text).toContain('PROD-2 · Fix login redirect')
+  expect(await ui.find({ type: 'Text', text: /→ answer Q1 \(which tenant\) in the session/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /→ validate #3994 #3995, then mark ready/ })).toBeDefined()
   expect((await ui.findAll({ type: 'Link' })).map(l => l.text)).toEqual(['#3994', '#3995', '#3962'])
 
   await ui.press({ key: 'b' })

@@ -10,18 +10,23 @@
 #   inbox open --all          also the sessions waiting review
 #   inbox open --windows      a tmux window per session instead
 #   inbox open --dry-run      what it would open, without opening anything
-#   inbox board               every running background session, grouped: the waits above, then working, done
+#   inbox board               every running background session, grouped: the waits above, then working, done,
+#                             each with `label` (ticket · title) and `next`: what to do about it, in one line
 #                             (what the /control pane draws)
 #   inbox attach <id>         bring one session up in tmux: its pane if attached, else a new window
 #
 # What a ticket waits on comes from the watcher's waiting.json (Linear labels and open PRs, refreshed every
 # minute while it runs) and the coordinator's state file; a session Claude reports as blocked with neither
 # is "needs input". A session already attached in a tmux pane isn't opened twice.
+# Coordinators are named "<ticket> · <short title>" (linear-poll/scripts/names.nu); the ticket is the first word.
 # Loaded at shell start by autoload.nu.
 
 # rules.nu WAITS, most urgent first (copied, not imported: its config.nu needs the built-in `open`,
 # which this module's `open` shadows; a test keeps the two equal)
 export const WAITS = ["needs input" "needs plan validation" "draft ready" "waiting review"]
+
+# Session names: "<ticket> · <short title>" (no `open` in there, so it can be imported)
+use ../../skills/linear-poll/scripts/names.nu [ticket-of short-title]
 
 const STATE_DIR = "~/.claude/agent-workflow"
 
@@ -33,18 +38,30 @@ def watcher-waits [dir: string] {
   try { ^cat $p | from json | get tickets | reduce --fold {} {|t, acc| $acc | upsert $t.ticket {waiting: $t.waiting, detail: $t.detail} } } catch { {} }
 }
 
-# The coordinator asked a question it is blocked on (state file: phase or a slice marked blocked)
-def asked [dir: string, ticket: string] {
+# The coordinator's state file, in brief: {title phase next asked}
+#   title  from its heading "# <ticket> — <title>"
+#   phase  its `phase:` line; next: its `next:` line, what it needs from the owner ("-" or absent: nothing)
+#   asked  it is blocked on a question (phase or a slice marked blocked)
+def state-of [dir: string, ticket: string] {
+  let none = {title: "", phase: "", next: "", asked: false}
   let p = ($dir | path join state $"($ticket).md")
-  if $ticket == "" or not ($p | path exists) { return false }
-  ^cat $p | lines | any {|l| ($l =~ '^phase:\s*blocked') or ($l =~ '^\|.*\|\s*blocked\b[^|]*\|') }
+  if $ticket == "" or not ($p | path exists) { return $none }
+  let ls = (^cat $p | lines)
+  let field = {|key| $ls | where {|l| $l starts-with $"($key):" } | get 0? | default "" | str replace $"($key):" "" | str trim }
+  let next = (do $field next)
+  {
+    title: ($ls | where {|l| $l starts-with "# " } | get 0? | default "" | parse --regex '^# \S+\s+[—-]\s+(?<t>.+)$' | get t.0? | default "")
+    phase: (do $field phase)
+    next: (if $next == "-" { "" } else { $next })
+    asked: ($ls | any {|l| ($l =~ '^phase:\s*blocked') or ($l =~ '^\|.*\|\s*blocked\b[^|]*\|') })
+  }
 }
 
-def why [s: record, waits: record, dir: string] {
-  let name = ($s.name? | default "")
+def why [s: record, waits: record, st: record] {
+  let ticket = (ticket-of ($s.name? | default ""))
   if (($s.waitingFor? | default "") =~ "permission") { return {waiting: "needs input", detail: "permission prompt"} }
-  if (asked $dir $name) { return {waiting: "needs input", detail: "question in the session"} }
-  let w = ($waits | get --optional $name)
+  if $st.asked { return {waiting: "needs input", detail: "question in the session"} }
+  let w = ($waits | get --optional $ticket)
   if $w != null { return $w }
   if $s.state? == "blocked" { return {waiting: "needs input", detail: ""} }
   null
@@ -52,6 +69,25 @@ def why [s: record, waits: record, dir: string] {
 
 # The groups of the control center, in order: the waits on the owner, then Claude's own states
 export const GROUPS = ["needs input" "needs plan validation" "draft ready" "working" "waiting review" "done"]
+
+# What to do about a session, in one line: an instruction when it waits on the owner, else where it is
+export def next-step [w: record, st: record] {
+  let prs = ($w.detail | parse --regex '/pull/(?<n>\d+)' | get n | each {|n| $"#($n)" } | str join " ")
+  match $w.waiting {
+    "needs input" => {
+      if $st.next != "" { $st.next
+      } else if $w.detail == "permission prompt" { "approve the permission prompt in the session"
+      } else if $w.detail == "question in the session" { "answer its question in the session"
+      } else if ($w.detail starts-with "clarifications") { $"answer the ($w.detail)"
+      } else { "blocked: attach to see what it needs" }
+    }
+    "needs plan validation" => $"approve or revise the ($w.detail)"
+    "draft ready" => (if $prs == "" { "validate the draft PRs, then mark them ready" } else { $"validate ($prs), then mark ready" })
+    "waiting review" => (if $prs == "" { "with a coworker for review" } else { $"($prs) with a coworker for review" })
+    "working" => (if $st.phase == "" { "working" } else { $st.phase })
+    _ => (if $st.phase == "" { "idle" } else { $st.phase })
+  }
+}
 
 # Every running background session with what it waits on (`waiting`, one of GROUPS), most urgent first, then oldest
 export def board [--state-dir: string = $STATE_DIR] {
@@ -61,12 +97,19 @@ export def board [--state-dir: string = $STATE_DIR] {
   | from json
   | where {|s| $s.pid? != null and ($s.kind? | default "background") == "background" }
   | each {|s|
-      let w = (why $s $waits $dir | default {waiting: (if $s.state? == "working" { "working" } else { "done" }), detail: ""})
+      let name = ($s.name? | default "")
+      let ticket = (ticket-of $name)
+      let st = (state-of $dir $ticket)
+      let w = (why $s $waits $st | default {waiting: (if $s.state? == "working" { "working" } else { "done" }), detail: ""})
       {
         id: $s.id
-        name: ($s.name? | default "")
+        name: $name
+        ticket: $ticket
+        # the name when it carries a title already ("<ticket> · <title>"), else the title from the state file
+        label: (if ($name | str contains " · ") or $st.title == "" { $name } else { $"($name) · (short-title $st.title $ticket)" })
         waiting: $w.waiting
         detail: $w.detail
+        next: (next-step $w $st)
         cwd: ($s.cwd | str replace $nu.home-dir "~")
         started: ($s.startedAt * 1_000_000 | into datetime)
         rank: ($GROUPS | enumerate | where item == $w.waiting | get index.0)

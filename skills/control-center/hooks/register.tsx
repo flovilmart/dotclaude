@@ -8,7 +8,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board } from '../types'
-import { COLORS, age, arrivals, grouped, parseBoard, splitDetail, summary, urlLabel } from './board'
+import { COLORS, ON_ME, age, arrivals, grouped, parseBoard, splitDetail, summary, urlLabel } from './board'
 
 const PANE = 'control'
 const EVERY_MS = 15_000
@@ -33,7 +33,7 @@ async function refresh($: EngineInterface) {
     const before = (await read($, board)).agents
     await update($, board, () => ({ agents, updatedAt: now, error: null }))
     $.ui.status(summary(agents))
-    for (const a of arrivals(before, agents)) $.ui.toast(`${a.name || a.id} · ${a.waiting}`)
+    for (const a of arrivals(before, agents)) $.ui.toast(`${a.label || a.name || a.id} · ${a.next || a.waiting}`)
   } catch (err) {
     const now = await $.clock.now()
     await update($, board, b => ({ ...b, updatedAt: now, error: String(err) }))
@@ -95,13 +95,18 @@ export const register: Register = on => {
             </Text>
             {g.agents.map(a => {
               const d = splitDetail(a.detail)
+              const next = a.next || d.text
               return (
-                <Box key={a.id} flexDirection="row" gap={1}>
+                <Box key={a.id} flexDirection="column">
                   <Button key={a.id} onPress={() => void attach($, a.id)}>
-                    {a.name || a.id} <Text dimColor>{age(a.started, now)}</Text>
+                    {a.label || a.name || a.id} <Text dimColor>{age(a.started, now)}</Text>
                   </Button>
-                  {d.text !== '' && <Text dimColor wrap="truncate-end">{d.text}</Text>}
-                  {d.urls.map(u => <Link key={u} href={u} label={urlLabel(u)} />)}
+                  {(next !== '' || d.urls.length > 0) && (
+                    <Box flexDirection="row" gap={1} marginLeft={2}>
+                      {next !== '' && <Text dimColor={!ON_ME.includes(a.waiting)} wrap="truncate-end">→ {next}</Text>}
+                      {d.urls.map(u => <Link key={u} href={u} label={urlLabel(u)} />)}
+                    </Box>
+                  )}
                 </Box>
               )
             })}

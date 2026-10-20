@@ -11,7 +11,7 @@
 #     <state-dir>/events.log. In monitor mode the watcher runs on its own (a tmux window)
 #     and follow.nu, under the Monitor tool, turns each new line of events.log into a
 #     notification in the dispatcher; quiet cycles cost nothing:
-#       send <ticket>: <message>     relay to that running coordinator with SendMessage
+#       send <session>: <message>    relay to that running coordinator with SendMessage (its name starts with the ticket)
 #       spec-gate <ticket> <repo>    run the early spec gate for a next-cycle ticket
 #       tell: <message>              tell the human
 #       info: <message>              something the watcher did (dispatch, restart, redispatch)
@@ -91,7 +91,7 @@ def comments [cfg, key, fixtures, issues: list, targets: list] {
 
 def dispatch [cfg, a] {
   let dir = ($env.CURRENT_FILE | path dirname)
-  mut args = [$a.repo $a.ticket $a.branch "--dispatcher" ($cfg.dispatcher_name? | default "dispatcher") "--permission-mode" ($cfg.permission_mode? | default "auto")]
+  mut args = [$a.repo $a.ticket $a.branch "--title" ($a.title? | default "") "--dispatcher" ($cfg.dispatcher_name? | default "dispatcher") "--permission-mode" ($cfg.permission_mode? | default "auto")]
   if ($cfg.model? | default "") != "" { $args = ($args | append ["--model" $cfg.model]) }
   let out = (^nu $"($dir)/dispatch.nu" ...$args | from json)
   if $out.mode == "tmux" {
@@ -112,7 +112,9 @@ def execute [cfg, key, a] {
     "wake" => {
       let out = (^nu $"($dir)/resume.nu" $a.ticket $a.msg | str trim)
       if ($out | str starts-with "running") {
-        {lines: [$"send ($a.ticket): ($a.msg)"], cool: false}
+        # "running <id> <name>": relay to the session's full name, which SendMessage needs
+        let name = ($out | parse "running {id} {name}" | get name.0? | default $a.ticket)
+        {lines: [$"send ($name): ($a.msg)"], cool: false}
       } else if ($out | str starts-with "resumed") {
         {lines: [$"info: restarted ($a.ticket) with: ($a.msg)"], cool: true}
       } else if $a.repo != null and $a.branch != null {
