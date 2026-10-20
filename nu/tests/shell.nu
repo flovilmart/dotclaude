@@ -51,13 +51,13 @@ def "the autoload file loads the shell modules from the home checkout" [] {
 
 # A PATH with a fake `claude agents --json` and a fake `tmux` whose panes run `claude attach b`; tmux calls
 # go to $env.FAKE_LOG. Sessions (Claude's state; what the watcher or the state file says):
-#   a ENG-1 blocked, waiting review     b ENG-2 blocked, nothing known (oldest)   c ENG-3 working
+#   a ENG-1 (titled) blocked, waiting review     b ENG-2 blocked, nothing known (oldest)   c ENG-3 working
 #   d ENG-4 blocked but not running     e ENG-5 blocked, draft ready + a blocked slice in its state file
 #   f ENG-6 idle, needs plan validation
 def fake-sessions [] {
   let bin = (mktemp -d | str trim)
   [
-    {id: a, pid: 1, name: "ENG-1", cwd: "/w/a", startedAt: 2000, state: blocked}
+    {id: a, pid: 1, name: "ENG-1 · Ship it", cwd: "/w/a", startedAt: 2000, state: blocked}
     {id: b, pid: 2, name: "ENG-2", cwd: "/w/b", startedAt: 1000, state: blocked}
     {id: c, pid: 3, name: "ENG-3", cwd: "/w/c", startedAt: 3000, state: working}
     {id: d, name: "ENG-4", cwd: "/w/d", startedAt: 4000, state: blocked}
@@ -77,7 +77,8 @@ esac
   $env.PATH | prepend $bin
 }
 
-# A watcher state dir: waiting.json, and ENG-5's state file with a blocked slice
+# A watcher state dir: waiting.json, ENG-5's state file with a blocked slice and what it needs (next:),
+# ENG-3's with a title and a phase
 def fake-state [] {
   let dir = (mktemp -d | str trim)
   {at: "2026-10-17T12:00:00+0000", tickets: [
@@ -86,7 +87,8 @@ def fake-state [] {
     {ticket: "ENG-6", waiting: "needs plan validation", detail: "plan on ENG-6 in Linear"}
   ]} | to json | save $"($dir)/waiting.json"
   mkdir $"($dir)/state"
-  "# ENG-5\nphase: subtasks\n## Slices\n| # | branch | status | PR |\n| 1 | b1 | awaiting-validation | https://gh/pr/5 |\n| 2 | b2 | blocked | |\n" | save $"($dir)/state/ENG-5.md"
+  "# ENG-3 — Make the login redirect stop looping on expired sessions\nphase: implementing s2/3\nnext: -\n" | save $"($dir)/state/ENG-3.md"
+  "# ENG-5\nphase: subtasks\nnext: answer Q1 (which tenant) in the session\n## Slices\n| # | branch | status | PR |\n| 1 | b1 | awaiting-validation | https://gh/pr/5 |\n| 2 | b2 | blocked | |\n" | save $"($dir)/state/ENG-5.md"
   $dir
 }
 
@@ -97,7 +99,7 @@ def "inbox says what each running session waits on most urgent first" [] {
     {name: "ENG-2", waiting: "needs input", detail: ""}
     {name: "ENG-5", waiting: "needs input", detail: "question in the session"}
     {name: "ENG-6", waiting: "needs plan validation", detail: "plan on ENG-6 in Linear"}
-    {name: "ENG-1", waiting: "waiting review", detail: "https://gh/pr/1"}
+    {name: "ENG-1 · Ship it", waiting: "waiting review", detail: "https://gh/pr/1"}
   ]
 }
 
@@ -105,7 +107,7 @@ def "inbox says what each running session waits on most urgent first" [] {
 def "inbox without the watcher calls every blocked session needs input" [] {
   let s = (with-env {PATH: (fake-sessions)} { inbox --state-dir (mktemp -d | str trim) })
   assert equal ($s | select name waiting) [
-    {name: "ENG-2", waiting: "needs input"} {name: "ENG-1", waiting: "needs input"} {name: "ENG-5", waiting: "needs input"}
+    {name: "ENG-2", waiting: "needs input"} {name: "ENG-1 · Ship it", waiting: "needs input"} {name: "ENG-5", waiting: "needs input"}
   ]
 }
 
@@ -122,7 +124,7 @@ def "inbox open skips sessions waiting review unless all" [] {
   assert equal ($mine | get name) ["ENG-2" "ENG-5" "ENG-6"]
   assert equal ($mine | get action | uniq) [attach]
   let all = (with-env {PATH: (fake-sessions), TMUX: ""} { inbox open --all --dry-run --state-dir $st })
-  assert equal ($all | get name) ["ENG-2" "ENG-5" "ENG-6" "ENG-1"]
+  assert equal ($all | get name) ["ENG-2" "ENG-5" "ENG-6" "ENG-1 · Ship it"]
 }
 
 @test
@@ -164,7 +166,7 @@ def "inbox board groups every running session waits first then working and done"
     {name: "ENG-5", waiting: "needs input"}
     {name: "ENG-6", waiting: "needs plan validation"}
     {name: "ENG-3", waiting: "working"}
-    {name: "ENG-1", waiting: "waiting review"}
+    {name: "ENG-1 · Ship it", waiting: "waiting review"}
   ]
   assert equal $inbox.GROUPS.0 $inbox.WAITS.0
 }
@@ -176,4 +178,25 @@ def "inbox attach selects an attached session and opens a window for another" []
   assert equal ($r | get action) [selected opened]
   let calls = (open --raw $log | lines | where $it !~ "^list-panes")
   assert equal $calls ["select-window -t %7" "select-pane -t %7" "new-window -n ENG-5 -c /w/e claude attach e"]
+}
+
+@test
+def "inbox board says what to do about each session in one line" [] {
+  let b = (with-env {PATH: (fake-sessions)} { inbox board --state-dir (fake-state) })
+  assert equal ($b | select ticket label next) [
+    {ticket: "ENG-2", label: "ENG-2", next: "blocked: attach to see what it needs"}
+    {ticket: "ENG-5", label: "ENG-5", next: "answer Q1 (which tenant) in the session"}
+    {ticket: "ENG-6", label: "ENG-6", next: "approve or revise the plan on ENG-6 in Linear"}
+    {ticket: "ENG-3", label: "ENG-3 · Make the login redirect stop looping on…", next: "implementing s2/3"}
+    {ticket: "ENG-1", label: "ENG-1 · Ship it", next: "with a coworker for review"}
+  ]
+}
+
+@test
+def "the next step names the PRs to validate" [] {
+  let none = {title: "", phase: "", next: "", asked: false}
+  assert equal (inbox next-step {waiting: "draft ready", detail: "https://gh/o/r/pull/12 https://gh/o/r/pull/13"} $none) "validate #12 #13, then mark ready"
+  assert equal (inbox next-step {waiting: "waiting review", detail: "https://gh/o/r/pull/12"} $none) "#12 with a coworker for review"
+  assert equal (inbox next-step {waiting: "needs input", detail: "permission prompt"} $none) "approve the permission prompt in the session"
+  assert equal (inbox next-step {waiting: "needs input", detail: "clarifications on ENG-9 in Linear"} $none) "answer the clarifications on ENG-9 in Linear"
 }

@@ -40,6 +40,13 @@ def "new tickets go by priority within capacity and none-priority last" [] {
 }
 
 @test
+def "a coordinator named with its ticket and title counts for that ticket and a new one gets the title" [] {
+  let titled = [{name: "DEMO-1 · Fix the login", pid: 1, state: "idle"}]
+  let r = (decide (cfg) (now) [(issue DEMO-1) (issue DEMO-2 {title: "Ship it"})] $titled [] {})
+  assert equal ($r.actions | select type ticket title) [{type: dispatch, ticket: "DEMO-2", title: "Ship it"}]
+}
+
+@test
 def "sub-issues of a coordinator and needs-spec or next-cycle tickets are not dispatched" [] {
   let r = (decide (cfg) (now) [
     (issue DEMO-5 {parent: "DEMO-9"}) (issue DEMO-6 {labels: [needs-spec]}) (issue DEMO-7 {cycle: {isActive: false, isNext: true}})

@@ -2,8 +2,10 @@
 # sessions.nu [ticket] [--json]
 #
 # Lists background coordinator sessions (from `claude agents --json --all`),
-# optionally filtered to the session named after one ticket id.
-# Columns: name id state status waitingFor pid sessionId cwd
+# optionally filtered to the sessions of one ticket id (named "<ticket> · <title>", or the bare ticket).
+# Columns: name ticket id state status waitingFor pid sessionId cwd
+
+use names.nu ticket-of
 
 def main [ticket?: string, --json] {
   let raw = (do { ^claude agents --json --all } | complete)
@@ -18,6 +20,7 @@ def main [ticket?: string, --json] {
     | each {|s|
         {
           name: ($s.name? | default "")
+          ticket: (ticket-of ($s.name? | default ""))
           id: ($s.id? | default "")
           state: ($s.state? | default "")
           status: ($s.status? | default "")
@@ -28,6 +31,6 @@ def main [ticket?: string, --json] {
         }
       }
   )
-  let rows = if $ticket == null { $rows } else { $rows | where name == $ticket }
+  let rows = if $ticket == null { $rows } else { $rows | where ticket == $ticket }
   if $json { $rows | to json } else { $rows }
 }

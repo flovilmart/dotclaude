@@ -1,12 +1,13 @@
 #!/usr/bin/env nu
-# dispatch.nu <repo-path> <ticket-id> <branch> [--dispatcher <session-name>]
+# dispatch.nu <repo-path> <ticket-id> <branch> [--title <linear title>] [--dispatcher <session-name>]
 #             [--permission-mode auto] [--model <alias>] [--skill ticket-workflow]
 #
 # 1. Allocates a sibling worktree for <ticket-id> on <branch> and marks it as held
 #    by the ticket (ensure-worktree.nu --ticket).
 # 2. Starts a background coordinator session there:
-#      claude --bg --name <ticket-id> --agent ticket-coordinator "/ticket-workflow <ticket-id> <dispatcher>"
-# 3. Prints one JSON object: {ticket, worktree, branch, mode, session}
+#      claude --bg --name "<ticket-id> · <short title>" --agent ticket-coordinator "/ticket-workflow <ticket-id> <dispatcher>"
+#    (names.nu session-name; the bare ticket id without --title)
+# 3. Prints one JSON object: {ticket, name, worktree, branch, mode, session}
 #
 # If the worktree directory has never been trusted, `claude --bg` refuses to
 # start ("Workspace not trusted"). In that case, when running inside tmux, a
@@ -14,10 +15,13 @@
 # user can accept the trust dialog once (mode = "tmux"). Later dispatches to
 # that worktree go straight to the background.
 
+use names.nu session-name
+
 def main [
   repo_path: string
   ticket: string
   branch: string
+  --title: string = ""
   --dispatcher: string = ""
   --permission-mode: string = "auto"
   --model: string = ""
@@ -31,7 +35,8 @@ def main [
   }
 
   let prompt = ($"/($skill) ($ticket) ($dispatcher)" | str trim)
-  mut args = ["--name" $ticket "--agent" "ticket-coordinator" "--permission-mode" $permission_mode]
+  let name = (session-name $ticket $title)
+  mut args = ["--name" $name "--agent" "ticket-coordinator" "--permission-mode" $permission_mode]
   if $model != "" { $args = ($args | append ["--model" $model]) }
 
   cd $wt
@@ -46,11 +51,12 @@ def main [
   ^rm -f $tmp_out $tmp_err
 
   if $exit_code == 0 {
-    # output looks like: "backgrounded · 7c5dcf5d · ENG-123"
+    # output looks like: "backgrounded · 7c5dcf5d · ENG-123 · Fix login redirect"
     let line = ($stdout | lines | where {|l| $l | str contains "backgrounded" } | append [""] | first)
     let id = ($line | split row "·" | each {|p| $p | str trim } | append ["" ""] | get 1)
     print ({
       ticket: $ticket
+      name: $name
       worktree: $wt
       branch: $branch
       mode: "bg"
@@ -66,6 +72,7 @@ def main [
     ^tmux new-window -n $ticket -c $wt $"claude ($quoted)"
     print ({
       ticket: $ticket
+      name: $name
       worktree: $wt
       branch: $branch
       mode: "tmux"

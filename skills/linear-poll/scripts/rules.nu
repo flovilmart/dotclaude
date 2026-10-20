@@ -10,7 +10,7 @@
 #   issues    my open issues: {id identifier title branchName priority createdAt updatedAt
 #             state labels project parent cycle: {isActive isNext} | null hasSpec
 #             comments: [{body createdAt}] | null}   comments only for comment-targets
-#   sessions  rows from sessions.nu: {name pid state ...}
+#   sessions  rows from sessions.nu: {name pid state ...}; a session belongs to the ticket its name starts with
 #   prs       rows from pr-sweep.nu
 #   state     what earlier cycles already did:
 #             {nudged: {ID: question createdAt}, prs: {url: {conds updatedAt}},
@@ -19,20 +19,21 @@
 #             no action for that ticket until then, so a slow start isn't retried every cycle
 #
 # Actions, one record each, `type` first:
-#   dispatch    ticket repo branch                new ticket, within capacity
-#   queued      ticket                            new ticket, over capacity
-#   wake        ticket repo branch msg            deliver msg: running → send, exited → resume, none → dispatch
-#   redispatch  ticket issueId repo branch n max  coordinator gone mid-ticket
-#   stall       ticket issueId max                gone max times: label + comment, tell the human
-#   spec-gate   ticket repo                       early spec gate for next cycle (needs the model)
+#   dispatch    ticket title repo branch                new ticket, within capacity
+#   queued      ticket                                  new ticket, over capacity
+#   wake        ticket title repo branch msg            deliver msg: running → send, exited → resume, none → dispatch
+#   redispatch  ticket title issueId repo branch n max  coordinator gone mid-ticket
+#   stall       ticket issueId max                      gone max times: label + comment, tell the human
+#   spec-gate   ticket repo                             early spec gate for next cycle (needs the model)
 
 use config.nu resolve-repo
+use names.nu ticket-of
 
 # What a ticket can wait on, most urgent first (the first three are on the owner, the last on a coworker)
 export const WAITS = ["needs input" "needs plan validation" "draft ready" "waiting review"]
 
 def has-label [issue, label] { $label != null and ($label in $issue.labels) }
-def session-of [sessions: list, ticket] { $sessions | where {|s| $s.name == $ticket } | get 0? }
+def session-of [sessions: list, ticket] { $sessions | where {|s| (ticket-of $s.name) == $ticket } | get 0? }
 def ts [v] { $v | into datetime }
 def comments-of [issue] { $issue.comments? | default [] | sort-by {|c| ts $c.createdAt } }
 def repo-of [cfg, issue] { resolve-repo $cfg.repos $issue.project? ($issue.labels? | default []) }
@@ -137,9 +138,9 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
   let fresh = ($todo | where {|i| (session-of $sessions $i.identifier) == null })
   let exited = ($todo | where {|i| let s = (session-of $sessions $i.identifier); $s != null and $s.pid == null })
   let new_actions = (
-    ($fresh | first $capacity | each {|i| {type: dispatch, ticket: $i.identifier, repo: (repo-of $cfg $i), branch: $i.branchName} })
+    ($fresh | first $capacity | each {|i| {type: dispatch, ticket: $i.identifier, title: $i.title, repo: (repo-of $cfg $i), branch: $i.branchName} })
     | append ($fresh | skip $capacity | each {|i| {type: queued, ticket: $i.identifier} })
-    | append ($exited | each {|i| {type: wake, ticket: $i.identifier, repo: (repo-of $cfg $i), branch: $i.branchName, msg: $"/ticket-workflow ($i.identifier) ($dispatcher)"} })
+    | append ($exited | each {|i| {type: wake, ticket: $i.identifier, title: $i.title, repo: (repo-of $cfg $i), branch: $i.branchName, msg: $"/ticket-workflow ($i.identifier) ($dispatcher)"} })
   )
 
   # 2. Human answers to clarifications or to a plan, each question nudged once
@@ -155,7 +156,7 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
       let already = (($acc.nudged | get --optional $i.identifier) == $q.createdAt)
       if not ($replied or $spec_edited) or $already { return $acc }
       {
-        actions: ($acc.actions | append {type: wake, ticket: $i.identifier, repo: (repo-of $cfg $i), branch: $i.branchName, msg: ($w.msg | str replace '{ID}' $i.identifier)})
+        actions: ($acc.actions | append {type: wake, ticket: $i.identifier, title: $i.title, repo: (repo-of $cfg $i), branch: $i.branchName, msg: ($w.msg | str replace '{ID}' $i.identifier)})
         nudged: ($acc.nudged | upsert $i.identifier $q.createdAt)
       }
     }
@@ -177,7 +178,7 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
   let pr_actions = (
     $pr_pass.msgs | transpose ticket msgs | each {|t|
       let issue = ($issues | where {|i| $i.identifier == $t.ticket } | get 0?)
-      {type: wake, ticket: $t.ticket,
+      {type: wake, ticket: $t.ticket, title: ($issue.title? | default ""),
        repo: (if $issue == null { null } else { repo-of $cfg $issue }),
        branch: ($issue.branchName? | default null),
        msg: ($t.msgs | str join "; ")}
@@ -192,7 +193,7 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
     | each {|i|
         let n = (comments-of $i | where {|c| $c.body | str starts-with $"($marker) · ($i.identifier) · redispatched" } | length)
         if $n < $max {
-          {type: redispatch, ticket: $i.identifier, issueId: $i.id, repo: (repo-of $cfg $i), branch: $i.branchName, n: ($n + 1), max: $max}
+          {type: redispatch, ticket: $i.identifier, title: $i.title, issueId: $i.id, repo: (repo-of $cfg $i), branch: $i.branchName, n: ($n + 1), max: $max}
         } else {
           {type: stall, ticket: $i.identifier, issueId: $i.id, max: $max}
         }

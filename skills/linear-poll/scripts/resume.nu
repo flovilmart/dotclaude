@@ -1,9 +1,9 @@
 #!/usr/bin/env nu
 # resume.nu <ticket> <message>
 #
-# Delivers <message> to the coordinator session named <ticket>:
-#   - process alive  -> prints `running <id>`; the caller must use SendMessage
-#                       (cross-session messaging) to reach it.
+# Delivers <message> to the coordinator session of <ticket> (named "<ticket> · <title>"):
+#   - process alive  -> prints `running <id> <name>`; the caller must use SendMessage
+#                       (cross-session messaging) to the session <name> to reach it.
 #   - process exited -> restarts it with `claude --resume <sessionId> --bg <message>`
 #                       and prints `resumed <id>`.
 #   - no session     -> prints `none`; the caller should dispatch afresh.
@@ -18,7 +18,7 @@ def main [ticket: string, message: string] {
   }
   let s = ($rows | first)
   if $s.pid != null {
-    print $"running ($s.id)"
+    print $"running ($s.id) ($s.name)"
     return
   }
   if $s.sessionId == "" {

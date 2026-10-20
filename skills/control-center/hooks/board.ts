@@ -29,7 +29,10 @@ export function parseBoard(stdout: string): Agent[] {
   if (!Array.isArray(rows)) return []
   return rows.flatMap((r: any) =>
     typeof r?.id === 'string' && typeof r?.waiting === 'string'
-      ? [{ id: r.id, name: String(r.name ?? ''), waiting: r.waiting, detail: String(r.detail ?? ''), cwd: String(r.cwd ?? ''), started: String(r.started ?? '') }]
+      ? [{
+          id: r.id, name: String(r.name ?? ''), label: String(r.label ?? r.name ?? ''), waiting: r.waiting,
+          detail: String(r.detail ?? ''), next: String(r.next ?? ''), cwd: String(r.cwd ?? ''), started: String(r.started ?? ''),
+        }]
       : [],
   )
 }

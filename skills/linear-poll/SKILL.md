@@ -29,7 +29,8 @@ Don't re-check Linear, sessions or PRs yourself: the watcher already did.
 
 ## Each line
 
-- `send <ticket>: <message>` → `SendMessage` to the session named `<ticket>` with `<message>`. Nothing else.
+- `send <session>: <message>` → `SendMessage` to `<session>` (everything before the first `: `, e.g.
+  `PROD-4079 · Fix grants display`: the coordinator's name starts with its ticket) with `<message>`. Nothing else.
 - `spec-gate <ticket> <repo>` → early spec gate for a next-cycle ticket. Delegate **spec-challenger** in the
   background with a brief: TASK: spec gate for <ticket>; GOAL: find out before the cycle starts whether
   this is buildable; GUARDRAILS: read-only, worktree = <repo> (the main checkout); DONE WHEN: SPEC VERDICT
