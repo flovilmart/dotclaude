@@ -60,7 +60,7 @@ def main [
   }
 
   let err = ($stderr + $stdout)
-  let untrusted = ($err | str downcase | str contains "not trusted")
+  let untrusted = ($err | str lowercase | str contains "not trusted")
   if $untrusted and ("TMUX" in $env) {
     let quoted = ($args | append [$prompt] | each {|a| $"'($a)'" } | str join " ")
     ^tmux new-window -n $ticket -c $wt $"claude ($quoted)"

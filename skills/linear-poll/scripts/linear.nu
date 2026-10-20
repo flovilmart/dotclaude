@@ -47,7 +47,7 @@ export def store-key [ref: string, key: string] {
   if $exists {
     let category = ($found.stdout | from json | get category? | default "unknown")
     if $category != "API_CREDENTIAL" {
-      let kind = ($category | str downcase | str replace --all "_" " ")
+      let kind = ($category | str lowercase | str replace --all "_" " ")
       error make { msg: $"'($r.item)' in ($r.vault) is a ($kind) item, not an API Credential; set linear_api_key_ref to an item of its own, e.g. op://($r.vault)/Linear API Key/credential" }
     }
   }

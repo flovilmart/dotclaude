@@ -11,7 +11,7 @@ def now [] { "2026-10-17T12:00:00Z" | into datetime }
 # An issue as linear.nu returns it, with overrides
 def issue [id: string, extra: record = {}] {
   {
-    id: $"uuid-($id)", identifier: $id, title: "t", branchName: $"f/($id | str downcase)", priority: 2
+    id: $"uuid-($id)", identifier: $id, title: "t", branchName: $"f/($id | str lowercase)", priority: 2
     createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", state: "Todo"
     labels: [], project: null, parent: null, cycle: {isActive: true, isNext: false}, hasSpec: false, comments: null
   } | merge $extra
@@ -19,7 +19,7 @@ def issue [id: string, extra: record = {}] {
 
 def pr [n: int, ticket: string, extra: record = {}] {
   {
-    number: $n, url: $"https://gh/pr/($n)", branch: $"f/($ticket | str downcase)-s1", ticket: $ticket, state: "open"
+    number: $n, url: $"https://gh/pr/($n)", branch: $"f/($ticket | str lowercase)-s1", ticket: $ticket, state: "open"
     draft: false, ci: "pass", review: "REVIEW_REQUIRED", requested: ["bob"], autoMerge: false, updatedAt: "t1", mergedAt: ""
   } | merge $extra
 }

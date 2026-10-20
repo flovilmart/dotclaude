@@ -36,3 +36,4 @@ jobs*
 /agent-workflow/
 settings.automode.local.json
 .claude
+.CLAUDE_JOB_DIR

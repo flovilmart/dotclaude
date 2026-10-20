@@ -22,7 +22,7 @@ def ci-state [rollup] {
   if ($checks | is-empty) { return "none" }
   let states = (
     $checks
-    | each {|c| ($c.conclusion? | default ($c.state? | default "")) | str upcase }
+    | each {|c| ($c.conclusion? | default ($c.state? | default "")) | str uppercase }
   )
   if ($states | any {|s| $s in ["FAILURE" "ERROR" "TIMED_OUT" "CANCELLED" "ACTION_REQUIRED" "STARTUP_FAILURE"] }) {
     "fail"
@@ -35,7 +35,7 @@ def ci-state [rollup] {
 
 def ticket-of [branch: string] {
   let m = ($branch | parse --regex '(?i)(?P<t>[a-z][a-z0-9]*-[0-9]+)')
-  if ($m | is-empty) { "" } else { $m.0.t | str upcase }
+  if ($m | is-empty) { "" } else { $m.0.t | str uppercase }
 }
 
 def to-row [pr, state: string, since: string] {

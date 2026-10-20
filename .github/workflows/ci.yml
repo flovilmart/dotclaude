@@ -24,18 +24,18 @@ jobs:
         include:
           # the oldest nushell the scripts support (MIN_NU in selftest.nu)
           - os: ubuntu-latest
-            nu: 0.111.0
+            nu: 0.114.0
             target: x86_64-unknown-linux-gnu
-            sha256: aa5376efaa5f2da98ebae884b901af6504dc8291acf5f4147ac994e9d03cd1ba
+            sha256: 3896777ebf3678f6d41736a5e995ba8360b338eb73c713254fc024e08ec72289
           # the latest release, on Linux and on macOS (BSD userland)
           - os: ubuntu-latest
-            nu: 0.112.2
+            nu: 0.116.1
             target: x86_64-unknown-linux-gnu
-            sha256: 4038c171dd2618f2413a2aa615b8dab7e9d04852be8200f1755df3e422328395
+            sha256: d6d8ace4be491ed8abba4026e73b60c0470b4671d7039307e7d772282ef863da
           - os: macos-latest
-            nu: 0.112.2
+            nu: 0.116.1
             target: aarch64-apple-darwin
-            sha256: a61806761db7bc2eddfc313d5ec496c92776a37124bc64a3036374bd55e8c881
+            sha256: 302fb3dfc5d44e7fe0d5b8227be8e75b4c3956ca8d4804234e5c68fbdd3e4917
     steps:
       - uses: actions/checkout@v5
 
