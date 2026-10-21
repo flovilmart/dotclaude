@@ -90,7 +90,7 @@ claude agents                     # one coordinator session per ticket, in its o
 claude attach ENG-123             # talk to a coordinator; ← to detach
 ```
 
-- Coordinator sessions are named `<ticket> · <short title>` (`skills/linear-poll/scripts/names.nu`); lookups match the ticket as the first word, so `claude attach ENG-123` still works. `inbox board` / `/control` show each one's next step (`next:` in its state file, else derived from what it waits on).
+- Coordinator sessions are named `<ticket> · <short title>` (`skills/linear-poll/scripts/names.nu`); lookups match the ticket as the first word, so `claude attach ENG-123` still works. `inbox board` / `/control` show each one's next step (`next:` in its state file, else derived from what it waits on); a coordinator waiting on me ends its turn with that same instruction, so the `claude agents` row shows it too.
 - Coordinators (`agents/ticket-coordinator.md`) run `/ticket-workflow`: background subagents for the human-facing steps (`repo-scout`, `spec-challenger`), and the saved workflows `workflows/plan.js` and `workflows/subtask.js` for the deterministic ones (`slice-planner` ⇄ `design-challenger`; `implementer` ⇄ `code-challenger` → `verifier` → `security-reviewer` + `smoke-tester`).
 - Specs are written into the Linear task (`## Spec`); clarification questions are Linear comments prefixed `🤖 agent-workflow`.
 - Every worker gets a brief (task, goal, guardrails, done-when) and refuses to work without one.
