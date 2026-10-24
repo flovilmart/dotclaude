@@ -11,8 +11,8 @@ It's autonomous between three human touchpoints, and it's built to make each one
 | when | who | what you get | your action |
 |------|-----|--------------|-------------|
 | before any code | you | the slice plan as a Linear comment | reply `approve`, or feedback to revise it |
-| each slice is done | you | a **draft** PR with a validation packet: acceptance criteria → test → smoke evidence, "check first" items where the agent was unsure, commands to try it | review comments if needed, then **mark it Ready for review** (your sign-off) |
-| after your validation | coworker | the coworker is requested on a PR with a short reading guide and "validated by you" | approve → GitHub auto-merges |
+| each slice is done | you | a **draft** PR, and a validation note on the Linear sub-issue: acceptance criteria → test → smoke evidence, "check first" items where the agent was unsure, commands to try it | review comments if needed, then **mark it Ready for review** (your sign-off) |
+| after your validation | coworker | the coworker is requested on a PR whose body says in 2-3 sentences what it does and its caveats | approve → GitHub auto-merges |
 
 You validate by marking the PR ready because GitHub doesn't let you approve a PR the agent opened
 under your account. A coworker fix that changes behaviour sends the PR back to you for re-validation
@@ -30,7 +30,7 @@ of just the affected criteria. `/agent-workflow status` lists everything **waiti
             │        ├─ spec-challenger   → READY | questions  ──▶ Linear comment + label + message to you
             │        ├─ slice-planner ⇄ design-challenger      → stack plan ──▶ you approve ──▶ Linear sub-issues
             │        └─ per subtask: implementer ⇄ code-challenger → verifier → security-reviewer + smoke-tester → re-review of late fixes
-            │                        → draft PR + validation packet ──▶ you mark ready ──▶ coworker requested ──▶ approves → auto-merge → sub-issue Done
+            │                        → draft PR + validation note ──▶ you mark ready ──▶ coworker requested ──▶ approves → auto-merge → sub-issue Done
             │
             └─▶ claude --bg --name ENG-124 ...                           (worktree platform-wt1)
 ```
@@ -55,7 +55,7 @@ at any time and talk to it; it answers from its state file and resumes.
 | `nu/shell/inbox.nu`, `skills/inbox` | The `inbox` shell command (autoloaded) and `/inbox`: running sessions with what each waits on — **needs input** (a question: Linear clarifications, a `blocked` slice, a permission prompt), **needs plan validation**, **draft ready**, **waiting review** (a coworker's turn) — from the watcher's `waiting.json` and the state files. `inbox open` opens those waiting on you (`--all`: also waiting review) in one tmux window `inbox`, a tiled pane each labelled `<name> · <waiting>` (`--windows`: a window each); never twice; outside tmux it attaches them one after another. |
 | `skills/control-center` | A mod (auto-loaded from the skills folder): `/control` opens a live **Agents** pane in the session (the dispatcher's), refreshed every 15 s from `inbox board`: every running background agent grouped needs input → needs plan validation → draft ready → working → waiting review → done, with age, detail and PR links. Pressing an agent brings it up in tmux (`inbox attach`), `o` opens everything on you (`inbox open`), `r` refreshes; the status line keeps `agents: 2 input · 1 plan · 3 draft`, and a toast says when an agent starts waiting on you. `claude plugin test skills/control-center` runs its tests. Claude's own `claude agents` view can't carry custom labels (fixed columns, no status API), hence this pane. |
 | `skills/linear-poll/scripts/*.nu` | `ensure-worktree.nu` (sibling `<repo>-wt<N>` pool, same convention as `linear-ticket`), `dispatch.nu` (worktree + `claude --bg`, named `<ticket> · <short title>` by `names.nu`), `sessions.nu` (wraps `claude agents --json --all`), `resume.nu` (wake a stopped coordinator). |
-| `skills/ticket-workflow/` | The per-ticket pipeline the coordinator runs. `pr-body.md` is the PR body template: owner validation block + coworker summary. |
+| `skills/ticket-workflow/` | The per-ticket pipeline the coordinator runs. `pr-body.md`: the short PR body for the coworker, and the owner's validation note (a Linear comment). |
 | `skills/stack-pr/` | Stacked PR mechanics: GitHub native `gh stack` when installed, manual `gh pr create --base` otherwise. |
 | `workflows/plan.js`, `workflows/subtask.js` | Saved workflows the coordinator runs with the `Workflow` tool: the plan with bounded design-challenge rounds, and each subtask's implement → review → verify (with a slice size gate) → security + smoke loop with bounded fix rounds, ending with a code review of every fix made after the first review. One structured result per run; resumable from cache. `workflows/test/` runs both offline against scripted agents (`node --test`). |
 | `agents/ticket-coordinator.md` | Main agent of each coordinator session (`--agent ticket-coordinator`): orchestrates, never implements. |
@@ -197,7 +197,7 @@ Where the tokens and the minutes go, and what keeps them down:
   implement, code review, fixes for failing checks, security) inherit your default model.
 - **Verification is scoped** to the packages changed since the base (`verify_scope: affected`); CI runs
   the full suite on the PR, and failures come back through the poll.
-- **Fix rounds carry blocking findings only**; SHOULD and NIT go to your validation packet.
+- **Fix rounds carry blocking findings only**; SHOULD and NIT go to your validation note.
 - **Gates where they matter**: the planner flags slices for smoke and security; the second
   `/security-review` pass runs only on request.
 - **Repo profiles are cached** per repo until agent docs, manifests or CI config change.

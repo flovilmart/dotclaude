@@ -57,6 +57,6 @@ Uncertain: <path:line — decision or assumption made without explicit guidance,
 Needs human: <precise question | none>
 ```
 
-`Uncertain` goes straight into the owner's validation packet as "check first". List every judgement call a careful reviewer would want to double-check. Honest uncertainty here saves the owner from finding it the hard way.
+`Uncertain` goes straight into the owner's validation note as "check first". List every judgement call a careful reviewer would want to double-check. Honest uncertainty here saves the owner from finding it the hard way.
 
 Stop and report `BLOCKED` with a precise question rather than guessing when a decision would change the public API, the data model, or the user-visible behaviour.
