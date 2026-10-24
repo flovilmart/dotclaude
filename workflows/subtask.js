@@ -25,7 +25,7 @@
 //
 // Returns one structured result; the coordinator ships the PR, updates Linear
 // and decides what to do with status != READY. Linear is never touched here.
-// The READY result carries what the owner's validation packet needs:
+// The READY result carries what the owner's validation note needs:
 // coverage, smokeCriteria, uncertain, deviations, carried, changedLines.
 
 export const meta = {

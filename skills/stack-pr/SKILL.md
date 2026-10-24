@@ -30,7 +30,7 @@ A subtask that depends on an unmerged subtask is stacked on that subtask's branc
 - Stack base = Linear's `gitBranchName` (already checked out in the worktree); it is slice 1's branch.
 - Slice n branch = `<gitBranchName>-s<n>-<slug>` (config `slice_branch_pattern`). Keeping the issue key in every branch name lets Linear link every PR to the issue.
 - PR title = repo convention, else `<Ticket>: <slice goal>` and, for n > 1, suffix ` (<n>/<total>)`.
-- PR body = `~/.claude/skills/ticket-workflow/pr-body.md` (owner validation block + reviewer summary), inside the repo's PR template headings when it has one.
+- PR body = the short body in `~/.claude/skills/ticket-workflow/pr-body.md` (2-3 sentences: what it does, caveats), inside the repo's PR template headings when it has one. The owner's validation note goes on the Linear sub-issue, not in the PR.
 
 ## gh stack mode
 
