@@ -115,8 +115,8 @@ assumptions in the spec, and continues.
 ## Closing the loop
 
 - **PR events.** Every other watcher cycle (about every 2 minutes) runs `pr-sweep.nu` per repo and sends each
-  coordinator one message with what newly changed on its PRs (each condition is reported once): CI failing, changes requested, new comments, approved and green, merged. The
-  coordinator fixes CI from the failing job's log, applies review threads and replies on each, re-requests
+  coordinator one message with what newly changed on its PRs (each condition is reported once): CI failing, merge conflicts, changes requested, new comments, approved and green, merged. The
+  coordinator fixes CI from the failing job's log, rebases and resolves merge conflicts right away, applies review threads and replies on each, re-requests
   the reviewer, and after a merge syncs the stack and moves the Linear sub-issue to Done. When every
   sub-issue is merged the ticket goes to Done.
 - **Human review stays, in two steps.** The coordinator never marks a PR ready and never approves one. You

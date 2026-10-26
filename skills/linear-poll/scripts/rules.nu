@@ -85,6 +85,7 @@ export def pr-conds [row] {
   [
     [cond, on];
     [ci-fail ($open and $row.ci == "fail")]
+    [conflict ($open and ($row.mergeable? | default "") == "CONFLICTING")]
     [changes-requested ($open and $row.review == "CHANGES_REQUESTED")]
     [out-of-draft ($open and not $row.draft and ($requested | is-empty) and $row.review not-in [APPROVED CHANGES_REQUESTED])]
     [approved-green ($open and $row.review == "APPROVED" and $row.ci == "pass" and not $row.draft and not $row.autoMerge)]
@@ -95,6 +96,7 @@ export def pr-conds [row] {
 def pr-message [row, cond: string] {
   match $cond {
     "ci-fail" => $"PR #($row.number) \(($row.branch)\): CI failing"
+    "conflict" => $"PR #($row.number) \(($row.branch)\): merge conflicts with ($row.base? | default 'its base'), sync and resolve"
     "changes-requested" => $"PR #($row.number): changes requested"
     "out-of-draft" => $"PR #($row.number): out of draft, nobody requested \(validated by the owner, or a comment-only review\)"
     "approved-green" => $"PR #($row.number): approved and green, enable auto-merge if config allows"

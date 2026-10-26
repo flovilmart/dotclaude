@@ -20,7 +20,8 @@ def issue [id: string, extra: record = {}] {
 def pr [n: int, ticket: string, extra: record = {}] {
   {
     number: $n, url: $"https://gh/pr/($n)", branch: $"f/($ticket | str lowercase)-s1", ticket: $ticket, state: "open"
-    draft: false, ci: "pass", review: "REVIEW_REQUIRED", requested: ["bob"], autoMerge: false, updatedAt: "t1", mergedAt: ""
+    base: "main", draft: false, ci: "pass", review: "REVIEW_REQUIRED", requested: ["bob"], mergeable: "MERGEABLE"
+    autoMerge: false, updatedAt: "t1", mergedAt: ""
   } | merge $extra
 }
 
@@ -110,6 +111,21 @@ def "a PR condition is reported once and later changes are activity" [] {
 def "owner validation is reported" [] {
   let r = (decide (cfg) (now) [] (live DEMO-6) [(pr 7 DEMO-6 {requested: []})] {})
   assert equal $r.actions.0.msg "PR #7: out of draft, nobody requested (validated by the owner, or a comment-only review)"
+}
+
+@test
+def "a merge conflict is reported once and again after it was resolved" [] {
+  let first = (decide (cfg) (now) [] (live DEMO-6) [(pr 7 DEMO-6 {mergeable: "CONFLICTING"})] {})
+  assert equal $first.actions.0.msg "PR #7 (f/demo-6-s1): merge conflicts with main, sync and resolve"
+  let resolved = (decide (cfg) (now) [] (live DEMO-6) [(pr 7 DEMO-6 {mergeable: "MERGEABLE", updatedAt: "t2"})] $first.state)
+  let again = (decide (cfg) (now) [] (live DEMO-6) [(pr 7 DEMO-6 {mergeable: "CONFLICTING", updatedAt: "t2"})] $resolved.state)
+  assert equal $again.actions.0.msg "PR #7 (f/demo-6-s1): merge conflicts with main, sync and resolve"
+}
+
+@test
+def "an unknown mergeable state is not a conflict" [] {
+  let r = (decide (cfg) (now) [] (live DEMO-6) [(pr 7 DEMO-6 {mergeable: "UNKNOWN"})] {})
+  assert equal $r.actions []
 }
 
 @test
