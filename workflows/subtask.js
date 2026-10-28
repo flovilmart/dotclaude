@@ -143,16 +143,19 @@ ${asText(a.slice)}`
 const guardrails = (extra) => `
 GUARDRAILS: the Guardrails of the spec and of the slice; the repository's AGENTS.md / CLAUDE.md; stay on branch ${a.branch}; touch only this slice's area; ${a.flag ? `new behaviour stays behind flag ${a.flag}, default off` : 'no flag: keep every change additive and backward compatible'}; never weaken or skip a check; stop and ask (status BLOCKED with a precise question) when a decision would change a public API, the data model or user-visible behaviour.${extra ? ' ' + extra : ''}`
 
+// The verifier runs package suites, affected checks and the build; the implementer stays on focused checks.
+const FOCUSED = 'the focused checks (test files by path, lint and format on changed files, one typecheck at the end; never a whole package suite, turbo run, the affected checks or a build)'
+
 const implementBrief = () => `TASK: implement this slice on branch ${a.branch} using red → green → refactor, committing after each green state.
 GOAL: ${a.slice && a.slice.goal ? a.slice.goal : 'the part of the spec this slice covers (see Slice and Spec in CONTEXT)'}
 ${guardrails()}
-DONE WHEN: the slice's "done when" holds, the scoped fast checks pass, the tree is clean, and you return the SLICE REPORT as structured output (status DONE | BLOCKED | PARTIAL), listing under "uncertain" every decision a human should double-check.
+DONE WHEN: the slice's "done when" holds, ${FOCUSED} pass, the tree is clean, and you return the SLICE REPORT as structured output (status DONE | BLOCKED | PARTIAL), listing under "uncertain" every decision a human should double-check.
 ${context()}`
 
 const fixBrief = (kind, items, extra) => `TASK: apply these ${kind} findings on branch ${a.branch}; for each one answer "fixed | not fixed (why) | disagree (why)" in the findings field. Commit per repo convention.
 GOAL: same slice goal; the findings exist to make the slice correct, not to widen it.
 ${guardrails('Do not re-litigate approved design; a disagreement is reported, not silently skipped.')}
-DONE WHEN: every finding has an answer, scoped fast checks pass, tree clean; return the SLICE REPORT as structured output.
+DONE WHEN: every finding has an answer, ${FOCUSED} pass, tree clean; return the SLICE REPORT as structured output.
 FINDINGS:
 ${asText(items)}
 ${extra ? '\nADDITIONAL:\n' + extra : ''}

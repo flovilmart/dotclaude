@@ -93,6 +93,19 @@ test('verification is scoped to affected packages unless verifyScope is full', a
   assert.match(full.calls.find((c) => c.type === 'verifier').prompt, /the full suite/)
 })
 
+test('implementer briefs ask for focused checks, never the package suites', async () => {
+  const { calls } = await run('subtask.js', ARGS, {
+    implementer: [impl(['a1 feat']), impl(['b2 fix types'])],
+    verifier: [{ result: 'FAIL', failures: 'TS2345', changedLines: 100, report: 'fail' }],
+  })
+  const briefs = calls.filter((c) => c.type === 'implementer').map((c) => c.prompt)
+  assert.equal(briefs.length, 2)
+  for (const brief of briefs) {
+    assert.match(brief, /test files by path/)
+    assert.match(brief, /never a whole package suite/)
+  }
+})
+
 test('an oversized slice stops with a request to split it', async () => {
   const { result } = await run('subtask.js', { ...ARGS, maxLines: 400 }, {
     verifier: [{ result: 'PASS', changedLines: 950, report: 'pass' }],

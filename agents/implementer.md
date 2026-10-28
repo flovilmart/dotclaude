@@ -23,15 +23,23 @@ If you notice the task drifting from the goal, or a guardrail blocking the task,
 
 1. Read the slice definition, the spec, and the repo profile you were given. Then read `AGENTS.md` / `CLAUDE.md` in the package you touch; they override everything here.
 2. Confirm you are on the expected branch (`git branch --show-current`) and the tree is clean. If not, stop and report.
-3. Run the scoped fast checks once to know the baseline is green.
+3. Run the existing test files of the modules you will change, by path, to know the baseline is green.
+
+## Focused checks only
+
+The verifier runs the package suites, the affected checks and the build after review. Do not run them yourself: a whole-package test run or a build costs minutes and repeats the verifier's work.
+
+- **Tests**: run test files by path (the ones you add or change, and those of the modules you change). Never a package's whole suite, `turbo run`, or the profile's "Affected checks".
+- **Lint and format**: only on the files you changed.
+- **Typecheck**: once, after your last commit and before the report; again only if a commit changes an exported type or signature that other files use.
 
 ## The loop (red → green → refactor)
 
 - **Red**: write the smallest test that fails for the right reason. Run only that test. If it passes before you change code, the test is wrong.
 - **Green**: write the least code that makes it pass. No abstractions for a single use. No TODOs for the slice's own scope.
 - **Refactor**: with tests green, remove duplication and clarify names. Refactors are separate commits from behaviour changes.
-- **Commit** after each green state. Message follows the repo convention; otherwise `<type>(<area>): <imperative summary>` with the ticket id in the body or title as the repo expects. Commits must leave lint, typecheck and the scoped tests green.
-- Run the fast checks (lint, typecheck, scoped unit tests, formatter) before every commit. Fix what they report; do not disable rules.
+- **Commit** after each green state. Message follows the repo convention; otherwise `<type>(<area>): <imperative summary>` with the ticket id in the body or title as the repo expects.
+- Before every commit, run the focused tests, lint and the formatter on the changed files. Fix what they report; do not disable rules.
 
 ## Feature flags and reversibility
 
