@@ -5,7 +5,7 @@ use std/assert
 const HERE = path self .
 
 def run-sample [] {
-  let out = (mktemp -d | str trim)
+  let out = (mktemp -d --tmpdir | str trim)
   let runner = ($HERE | path join ../run-tests.nu)
   # GITHUB_ACTIONS off: in CI these deliberate failures must not reach the real job summary
   let r = (with-env {SAMPLE_OUT: $out, GITHUB_ACTIONS: "false"} { do { ^nu $runner ($HERE | path join fixtures/sample.nu) } | complete })
@@ -50,8 +50,8 @@ def "after-each runs per executed test and after-all once" [] {
 
 @test
 def "in GitHub Actions failures are annotated at the failing line and summarized" [] {
-  let summary = (mktemp | str trim)
-  let out = (mktemp -d | str trim)
+  let summary = (mktemp --tmpdir | str trim)
+  let out = (mktemp -d --tmpdir | str trim)
   let r = (with-env {SAMPLE_OUT: $out, GITHUB_ACTIONS: "true", GITHUB_STEP_SUMMARY: $summary} {
     do { ^nu ($HERE | path join ../run-tests.nu) ($HERE | path join fixtures/sample.nu) } | complete
   })

@@ -8,7 +8,7 @@ use ../linear.nu
 # $env.FAKE_OP_KEY (fails when empty); `op item get` finds an item of category $env.FAKE_OP_ITEM
 # (none when empty, two when AMBIGUOUS); edit and create succeed
 def fake-op [] {
-  let bin = (mktemp -d | str trim)
+  let bin = (mktemp -d --tmpdir | str trim)
   r##'#!/bin/sh
 echo "$*" >> "$FAKE_OP_LOG"
 case "$1 $2" in
@@ -29,7 +29,7 @@ exit 1
 
 # Run `code` with the fake op; returns {result, calls}
 def with-op [vars: record, code: closure] {
-  let log = (mktemp | str trim)
+  let log = (mktemp --tmpdir | str trim)
   let env_vars = {LINEAR_API_KEY: "", FAKE_OP_KEY: "", FAKE_OP_ITEM: "", FAKE_OP_LOG: $log, PATH: ($env.PATH | prepend (fake-op))} | merge $vars
   let result = (with-env $env_vars { do $code })
   {result: $result, calls: (open --raw $log | lines)}

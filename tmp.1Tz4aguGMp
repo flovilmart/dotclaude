@@ -1,9 +1,0 @@
-POST /token HTTP/1.1
-Host: 127.0.0.1:18766
-User-Agent: nushell
-Accept: */*
-Content-Type: application/x-www-form-urlencoded
-accept-encoding: gzip
-Content-Length: 60
-
-grant_type=refresh_token&refresh_token=r1&client_id=client-1

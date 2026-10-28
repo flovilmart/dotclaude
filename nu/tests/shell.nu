@@ -7,14 +7,14 @@ use ../shell/inbox.nu
 const HERE = path self .
 
 def config-with [extra: string] {
-  let f = (mktemp --suffix .yaml | str trim)
+  let f = (mktemp --tmpdir --suffix .yaml | str trim)
   $"team_key: DEMO\n($extra)\nrepos:\n  - match: default\n    repo: ~/src/x\n" | save --force $f
   $f
 }
 
 # A PATH whose `op read` prints $env.FAKE_OP_KEY, or fails when it's empty
 def fake-op [] {
-  let bin = (mktemp -d | str trim)
+  let bin = (mktemp -d --tmpdir | str trim)
   r##'#!/bin/sh
 if [ "$1" = read ] && [ -n "$FAKE_OP_KEY" ]; then echo "$FAKE_OP_KEY"; exit 0; fi
 echo '[ERROR] not found' >&2
@@ -55,7 +55,7 @@ def "the autoload file loads the shell modules from the home checkout" [] {
 #   d ENG-4 blocked but not running     e ENG-5 blocked, draft ready + a blocked slice in its state file
 #   f ENG-6 idle, needs plan validation
 def fake-sessions [] {
-  let bin = (mktemp -d | str trim)
+  let bin = (mktemp -d --tmpdir | str trim)
   [
     {id: a, pid: 1, name: "ENG-1 · Ship it", cwd: "/w/a", startedAt: 2000, state: blocked}
     {id: b, pid: 2, name: "ENG-2", cwd: "/w/b", startedAt: 1000, state: blocked}
@@ -80,7 +80,7 @@ esac
 # A watcher state dir: waiting.json, ENG-5's state file with a blocked slice and what it needs (next:),
 # ENG-3's with a title and a phase
 def fake-state [] {
-  let dir = (mktemp -d | str trim)
+  let dir = (mktemp -d --tmpdir | str trim)
   {at: "2026-10-17T12:00:00+0000", tickets: [
     {ticket: "ENG-1", waiting: "waiting review", detail: "https://gh/pr/1"}
     {ticket: "ENG-5", waiting: "draft ready", detail: "https://gh/pr/5"}
@@ -105,7 +105,7 @@ def "inbox says what each running session waits on most urgent first" [] {
 
 @test
 def "inbox without the watcher calls every blocked session needs input" [] {
-  let s = (with-env {PATH: (fake-sessions)} { inbox --state-dir (mktemp -d | str trim) })
+  let s = (with-env {PATH: (fake-sessions)} { inbox --state-dir (mktemp -d --tmpdir | str trim) })
   assert equal ($s | select name waiting) [
     {name: "ENG-2", waiting: "needs input"} {name: "ENG-1 · Ship it", waiting: "needs input"} {name: "ENG-5", waiting: "needs input"}
   ]
@@ -129,7 +129,7 @@ def "inbox open skips sessions waiting review unless all" [] {
 
 @test
 def "inbox open splits one tmux window into a pane per session not already attached" [] {
-  let log = (mktemp | str trim)
+  let log = (mktemp --tmpdir | str trim)
   let st = (fake-state)
   with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --state-dir $st }
   let calls = (open --raw $log | lines)
@@ -147,7 +147,7 @@ def "inbox open splits one tmux window into a pane per session not already attac
 
 @test
 def "inbox open windows opens a tmux window per session not already attached" [] {
-  let log = (mktemp | str trim)
+  let log = (mktemp --tmpdir | str trim)
   let st = (fake-state)
   with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { inbox open --windows --state-dir $st }
   let calls = (open --raw $log | lines)
@@ -173,7 +173,7 @@ def "inbox board groups every running session waits first then working and done"
 
 @test
 def "inbox attach selects an attached session and opens a window for another" [] {
-  let log = (mktemp | str trim)
+  let log = (mktemp --tmpdir | str trim)
   let r = (with-env {PATH: (fake-sessions), TMUX: "/tmp/fake,1,0", FAKE_LOG: $log} { [(inbox attach b) (inbox attach e)] })
   assert equal ($r | get action) [selected opened]
   let calls = (open --raw $log | lines | where $it !~ "^list-panes")

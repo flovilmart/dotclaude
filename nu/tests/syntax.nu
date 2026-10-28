@@ -10,7 +10,7 @@ def "every nu file in the repo parses" [] {
   let root = ($HERE | path join ../.. | path expand)
   # files that `use ~/.claude/...` (nu/shell/autoload.nu) must resolve to this checkout,
   # not to whatever is installed: check from a HOME whose .claude is the repo
-  let home = (mktemp -d | str trim)
+  let home = (mktemp -d --tmpdir | str trim)
   ^ln -s $root $"($home)/.claude"
   let files = (glob $"($root)/**/*.nu" | to json --raw)
   let broken = (

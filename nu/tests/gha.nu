@@ -17,7 +17,7 @@ def "an annotation without properties" [] {
 
 @test
 def "the summary is appended to GITHUB_STEP_SUMMARY" [] {
-  let f = (mktemp | str trim)
+  let f = (mktemp --tmpdir | str trim)
   with-env {GITHUB_STEP_SUMMARY: $f} { gha summary "one"; gha summary "two" }
   assert equal (open --raw $f) "one\ntwo\n"
 }

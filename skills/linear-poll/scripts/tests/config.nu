@@ -17,7 +17,7 @@ def with-home [home: string, code: string] {
 }
 
 def yaml-config [text: string] {
-  let f = (mktemp --suffix .yaml | str trim)
+  let f = (mktemp --tmpdir --suffix .yaml | str trim)
   $text | save --force $f
   $f
 }
@@ -90,7 +90,7 @@ def "required keys are checked" [] {
 
 @test
 def "an old markdown config still loads and matches its migration" [] {
-  let out = (mktemp -d | str trim | path join config.local.yaml)
+  let out = (mktemp -d --tmpdir | str trim | path join config.local.yaml)
   ^nu ($HERE | path join ../config.nu) migrate --from (legacy-path) --to $out | ignore
   assert equal (load-config $out) (load-config (legacy-path))
   assert (open --raw $out | str contains "repo: ~/src/flovilmart/demo-app")
@@ -111,7 +111,7 @@ def "a comma separated reviewers value from the old format becomes a list" [] {
 
 @test
 def "without a yaml config the old markdown one is read" [] {
-  let home = (mktemp -d | str trim)
+  let home = (mktemp -d --tmpdir | str trim)
   mkdir $"($home)/.claude/skills/agent-workflow"
   cp (legacy-path) $"($home)/.claude/skills/agent-workflow/config.local.md"
   let r = (with-home $home "load-config | get team_key")
@@ -121,7 +121,7 @@ def "without a yaml config the old markdown one is read" [] {
 
 @test
 def "with neither config the error says how to create one" [] {
-  let home = (mktemp -d | str trim)
+  let home = (mktemp -d --tmpdir | str trim)
   let r = (with-home $home "load-config")
   assert not equal $r.exit_code 0
   assert ($r.stderr | str contains "run /agent-workflow start")

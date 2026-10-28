@@ -37,3 +37,6 @@ jobs*
 settings.automode.local.json
 .claude
 .CLAUDE_JOB_DIR
+# nushell `mktemp` without --tmpdir writes here
+tmp.*
+*.json.tmp.*
