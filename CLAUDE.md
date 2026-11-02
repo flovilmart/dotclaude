@@ -61,14 +61,6 @@ Head of Engineering at **tato**. Primary work is a large TypeScript monorepo wit
 
 ---
 
-## Notifications
-
-- `~/.claude/hooks/notify.sh` fires on Claude stop/input-required events
-- macOS `terminal-notifier` with tmux pane + git branch context
-- Different sounds for completion vs. input needed
-
----
-
 ## Workflow Notes
 
 - Secrets managed via **1Password CLI** (`op`)

@@ -6,6 +6,9 @@
 # Author: Andy Holt
 # Date: Mon 19 Jan 2026 23:13
 
+# Disabled: no hook calls this script. Sessions started before the hooks were removed still call it.
+exit 0
+
 set -ex
 code_status="$1"
 
