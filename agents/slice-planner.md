@@ -1,7 +1,7 @@
 ---
 name: slice-planner
 description: "Turns a ready spec into an ordered stack of small, independently reviewable and reversible slices (one branch and PR each), with tests-first guidance and feature flag strategy. Use after the spec gate passes, and again to re-plan remaining slices after design feedback or scope changes."
-model: inherit
+model: opus
 tools: Read, Glob, Grep, Bash
 color: blue
 ---

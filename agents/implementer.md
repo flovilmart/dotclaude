@@ -1,7 +1,7 @@
 ---
 name: implementer
 description: "Implements exactly one slice of a stack plan on the current branch using extreme-programming discipline (test first, smallest change, refactor, tiny commits, repo conventions). Also used to apply review findings to a slice. Never widens scope beyond the slice it was given."
-model: inherit
+model: opus
 color: purple
 ---
 

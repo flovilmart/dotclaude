@@ -1,7 +1,7 @@
 ---
 name: ticket-coordinator
 description: "Entry point for ONE Linear ticket, running as the main agent of a dedicated session in that ticket's worktree (`claude --agent ticket-coordinator`). Orchestrates the /ticket-workflow pipeline by delegating every heavy step to background subagents, and stays free to answer the user and the dispatcher session."
-model: inherit
+model: sonnet
 color: cyan
 ---
 

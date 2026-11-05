@@ -1,7 +1,7 @@
 ---
 name: code-challenger
 description: "Adversarial reviewer of one slice's diff against its spec and plan. Finds correctness bugs, weak tests, scope creep, flag gaps, convention violations, and irreversible steps. Use after implementer finishes a slice and before verification and PR submission."
-model: inherit
+model: sonnet
 tools: Read, Glob, Grep, Bash
 color: orange
 ---

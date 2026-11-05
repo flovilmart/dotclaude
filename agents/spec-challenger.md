@@ -1,7 +1,7 @@
 ---
 name: spec-challenger
 description: "Challenges whether a Linear ticket is ready to implement. Applies a definition-of-ready, drafts the spec it would implement, and lists only the clarification questions whose answers would change the implementation. Use at the start of every ticket and again after answers arrive."
-model: inherit
+model: sonnet
 tools: Read, Glob, Grep, Bash
 color: yellow
 ---

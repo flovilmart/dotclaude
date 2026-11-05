@@ -1,7 +1,7 @@
 ---
 name: design-challenger
 description: "Adversarial reviewer of a stack plan or design before any code is written. Hunts for irreversibility, hidden coupling, oversized slices, missing tests, flag or migration risks, and simpler alternatives. Use after slice-planner and before the first slice is implemented."
-model: inherit
+model: sonnet
 tools: Read, Glob, Grep, Bash
 color: red
 ---

@@ -1,7 +1,7 @@
 ---
 name: verifier
 description: "Runs the repository's full quality gates (format, lint, typecheck, tests, build when cheap) exactly as the repo profile and CI define them, and reports results with evidence. Use before every PR submission and after review fixes. Reports, does not fix (except running the formatter)."
-model: sonnet
+model: haiku
 tools: Read, Glob, Grep, Bash
 color: green
 ---

@@ -1,7 +1,7 @@
 ---
 name: repo-scout
 description: "Builds a compact \"repo profile\" for a worktree by reading AGENTS.md, CLAUDE.md, CONTRIBUTING, package manifests and CI config. Use before planning or implementing in an unfamiliar repository or package. Returns commands and conventions, never opinions."
-model: sonnet
+model: haiku
 tools: Read, Glob, Grep, Bash
 color: green
 ---

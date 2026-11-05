@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: "Security gate for one slice before its PR leaves draft: dependency audit, secret scan, and a focused review of the diff for authz, injection, data exposure and unsafe defaults, using the repo's own tooling where it exists. Reports BLOCKING findings that stop the PR; never fixes."
-model: inherit
+model: opus
 tools: Read, Glob, Grep, Bash, Skill
 color: red
 ---
