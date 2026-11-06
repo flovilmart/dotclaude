@@ -99,6 +99,19 @@ def "an answered plan wakes its coordinator once" [] {
 }
 
 @test
+def "a plan revised in place waits for a reply newer than the edit" [] {
+  let feedback = {body: "merge s2 and s3", createdAt: "2026-10-02T01:00:00.000Z"}
+  let first = (decide (cfg) (now) [(waiting-plan [(plan-question) $feedback])] (live DEMO-6) [] {})
+  assert equal (types $first.actions) ["wake DEMO-6"]
+  let revised = ((plan-question) | insert editedAt "2026-10-02T02:00:00.000Z")
+  let quiet = (decide (cfg) (now) [(waiting-plan [$revised $feedback])] (live DEMO-6) [] $first.state)
+  assert equal $quiet.actions []
+  let reply = {body: "approve", createdAt: "2026-10-02T03:00:00.000Z"}
+  let second = (decide (cfg) (now) [(waiting-plan [$revised $feedback $reply])] (live DEMO-6) [] $quiet.state)
+  assert equal (types $second.actions) ["wake DEMO-6"]
+}
+
+@test
 def "a spec section edited after the questions counts as an answer" [] {
   let q = {body: "🤖 agent-workflow · DEMO-8 · Clarifications needed\n1. ?", createdAt: "2026-10-02T00:00:00.000Z"}
   let edited = (issue DEMO-8 {state: "In Progress", labels: [needs-spec], hasSpec: true, updatedAt: "2026-10-03T00:00:00.000Z", comments: [$q]})

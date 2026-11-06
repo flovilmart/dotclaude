@@ -120,13 +120,13 @@ export def my-issues [auth: string, team_key: string] {
   gql $auth $q {team: $team_key} | get viewer.assignedIssues.nodes | each {|n| normalize-issue $n }
 }
 
-# {identifier: [{body createdAt}]} for the given issue ids (uuids)
+# {identifier: [{body createdAt editedAt}]} for the given issue ids (uuids); editedAt is null until an edit
 export def comments-for [auth: string, ids: list] {
   if ($ids | is-empty) { return {} }
   let q = '
     query($ids: [ID!]) {
       issues(first: 50, filter: { id: { in: $ids } }) {
-        nodes { identifier comments(first: 100) { nodes { body createdAt } } }
+        nodes { identifier comments(first: 100) { nodes { body createdAt editedAt } } }
       }
     }'
   gql $auth $q {ids: $ids} | get issues.nodes

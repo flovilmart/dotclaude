@@ -9,7 +9,7 @@
 #   now       datetime of this cycle
 #   issues    my open issues: {id identifier title branchName priority createdAt updatedAt
 #             state labels project parent cycle: {isActive isNext} | null hasSpec
-#             comments: [{body createdAt}] | null}   comments only for comment-targets
+#             comments: [{body createdAt editedAt?}] | null}   comments only for comment-targets
 #   sessions  rows from sessions.nu: {name pid state ...}; a session belongs to the ticket its name starts with
 #   prs       rows from pr-sweep.nu
 #   state     what earlier cycles already did:
@@ -38,6 +38,8 @@ def skipped [cfg, issue] { $cfg.skip_labels? | default [] | any {|l| has-label $
 def session-of [sessions: list, ticket] { $sessions | where {|s| (ticket-of $s.name) == $ticket } | get 0? }
 def ts [v] { $v | into datetime }
 def comments-of [issue] { $issue.comments? | default [] | sort-by {|c| ts $c.createdAt } }
+# The coordinator edits its plan comment for each revision: a round starts at the last edit
+def posted-at [comment] { $comment.editedAt? | default $comment.createdAt }
 def repo-of [cfg, issue] { resolve-repo $cfg.repos $issue.project? ($issue.labels? | default []) }
 
 def waits [cfg] {
@@ -154,13 +156,14 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
       let cs = (comments-of $i)
       let q = ($cs | where {|c| ($c.body | str starts-with $marker) and ($c.body | str contains $w.question) } | last 1 | get 0?)
       if $q == null { return $acc }
-      let replied = ($cs | any {|c| (ts $c.createdAt) > (ts $q.createdAt) and not ($c.body | str starts-with $marker) })
-      let spec_edited = ($w.spec and $i.hasSpec and (ts $i.updatedAt) > (ts $q.createdAt))
-      let already = (($acc.nudged | get --optional $i.identifier) == $q.createdAt)
+      let round = (posted-at $q)
+      let replied = ($cs | any {|c| (ts $c.createdAt) > (ts $round) and not ($c.body | str starts-with $marker) })
+      let spec_edited = ($w.spec and $i.hasSpec and (ts $i.updatedAt) > (ts $round))
+      let already = (($acc.nudged | get --optional $i.identifier) == $round)
       if not ($replied or $spec_edited) or $already { return $acc }
       {
         actions: ($acc.actions | append {type: wake, ticket: $i.identifier, title: $i.title, repo: (repo-of $cfg $i), branch: $i.branchName, msg: ($w.msg | str replace '{ID}' $i.identifier)})
-        nudged: ($acc.nudged | upsert $i.identifier $q.createdAt)
+        nudged: ($acc.nudged | upsert $i.identifier $round)
       }
     }
   )
