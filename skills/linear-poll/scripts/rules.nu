@@ -33,6 +33,8 @@ use names.nu ticket-of
 export const WAITS = ["needs input" "needs plan validation" "draft ready" "waiting review"]
 
 def has-label [issue, label] { $label != null and ($label in $issue.labels) }
+# Tickets with no repository work (e.g. Vanta laptop updates) carry one of these labels
+def skipped [cfg, issue] { $cfg.skip_labels? | default [] | any {|l| has-label $issue $l } }
 def session-of [sessions: list, ticket] { $sessions | where {|s| (ticket-of $s.name) == $ticket } | get 0? }
 def ts [v] { $v | into datetime }
 def comments-of [issue] { $issue.comments? | default [] | sort-by {|c| ts $c.createdAt } }
@@ -53,6 +55,7 @@ def stale-candidate [cfg, issue, sessions: list] {
     and not (has-label $issue $cfg.needs_spec_label?)
     and not (has-label $issue $cfg.needs_plan_label?)
     and not (has-label $issue $cfg.stalled_label?)
+    and not (skipped $cfg $issue)
     and (session-of $sessions $issue.identifier) == null
     # A sub-issue is worked by its parent's coordinator; redispatching it forks the stack.
     and ($issue.parent? == null or (session-of $sessions $issue.parent) == null))
@@ -127,7 +130,7 @@ export def decide [cfg, now: datetime, issues: list, sessions: list, prs: list, 
   # 1. New tickets in the current cycle, by priority (Linear 0 = none, sorts last), then age
   let todo = (
     $issues
-    | where {|i| $i.state == $cfg.todo_state and ($i.cycle?.isActive? | default false) and not (has-label $i $cfg.needs_spec_label?) }
+    | where {|i| $i.state == $cfg.todo_state and ($i.cycle?.isActive? | default false) and not (has-label $i $cfg.needs_spec_label?) and not (skipped $cfg $i) }
     | where {|i| $i.parent? == null or (session-of $sessions $i.parent) == null }
     | where {|i| $i.identifier not-in $cooling }
     | insert rank {|i| if ($i.priority? | default 0) == 0 { 5 } else { $i.priority } }

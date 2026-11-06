@@ -27,6 +27,7 @@ export const SCHEMA = {
   stalled_label: {type: string}
   needs_spec_label: {type: string}
   needs_plan_label: {type: string}
+  skip_labels: {type: list}
   create_subissues: {type: bool}
   repos: {type: repos, required: true}
   permission_mode: {type: string, choices: [auto acceptEdits default bypassPermissions]}

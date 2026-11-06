@@ -61,6 +61,18 @@ def "a stopped coordinator of a Todo ticket is restarted" [] {
 }
 
 @test
+def "a ticket with a skip label is never dispatched or restarted or redispatched" [] {
+  let scfg = ((cfg) | upsert skip_labels [Vanta])
+  let todo = (issue DEMO-20 {labels: [Vanta]})
+  assert equal (decide $scfg (now) [$todo] [] [] {} | get actions) []
+  assert equal (decide $scfg (now) [$todo] [{name: "DEMO-20", pid: null, state: "done"}] [] {} | get actions) []
+  let gone = (issue DEMO-21 {state: "In Progress", labels: [Vanta], comments: []})
+  assert equal (comment-targets $scfg [$gone] [] {}) []
+  assert equal (decide $scfg (now) [$gone] [] [] {} | get actions) []
+  assert equal (decide (cfg) (now) [$todo] [] [] {} | get actions | types $in) ["dispatch DEMO-20"]
+}
+
+@test
 def "a ticket in cooldown gets no action until the cooldown ends" [] {
   let cooling = (decide (cfg) (now) [(issue DEMO-1)] [] [] {cooldown: {"DEMO-1": "2026-10-17T12:05:00Z"}})
   assert equal $cooling.actions []

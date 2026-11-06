@@ -17,6 +17,7 @@ done_state: Done                                # set on a sub-issue when its PR
 stalled_label: agent-stalled                    # added after max_redispatch automatic restarts of a dead coordinator
 needs_spec_label: needs-spec                    # added while waiting for clarifications
 needs_plan_label: needs-plan-approval           # added while the slice plan waits for your approval
+skip_labels: []                                 # never dispatch tickets with one of these labels (work with no code, e.g. [Vanta])
 create_subissues: true                          # one Linear sub-issue per slice, each with its own PR; priority comes from Linear
 
 # ── Repos ───────────────────────────────────────────────────────────────────
